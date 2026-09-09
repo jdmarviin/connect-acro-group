@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Zoom Meeting</title>
+    <meta charset="utf-8" />
+    <link type="text/css" rel="stylesheet" href="/zoom-meetingsdk.css" />
+    <meta name="format-detection" content="telephone=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <style>
+        body { padding: 0; margin: 0; background: black; }
+        #zmmtg-root { width: 100%; height: 100%; position: absolute; }
+    </style>
+</head>
+<body>
+    <div id="zmmtg-root"></div>
+    <div id="aria-notify-area"></div>
+
+    <script src="https://source.zoom.us/6.2.0/lib/vendor/react.min.js"></script>
+    <script src="https://source.zoom.us/6.2.0/lib/vendor/react-dom.min.js"></script>
+    <script src="https://source.zoom.us/6.2.0/lib/vendor/redux.min.js"></script>
+    <script src="https://source.zoom.us/6.2.0/lib/vendor/redux-thunk.min.js"></script>
+    <script src="https://source.zoom.us/6.2.0/lib/vendor/lodash.min.js"></script>
+    <script src="https://source.zoom.us/zoom-meeting-6.2.0.min.js"></script>
+    
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const meetingNumber = urlParams.get('meetingNumber');
+        const passWord = urlParams.get('pwd');
+        const userName = urlParams.get('userName');
+        const userEmail = urlParams.get('userEmail');
+        const signature = urlParams.get('signature');
+        const sdkKey = urlParams.get('sdkKey');
+        const leaveUrl = urlParams.get('leaveUrl');
+        const userId = urlParams.get('userId');
+
+        let entryTime = null;
+        const STORAGE_KEY = `zoom_sessions_${meetingNumber}`;
+
+        function getSessions() {
+            try {
+                return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+            } catch(e) {
+                return [];
+            }
+        }
+
+        window.addEventListener('beforeunload', function() {
+            if (entryTime) {
+                const exitTime = new Date();
+                const durationMs = exitTime.getTime() - entryTime.getTime();
+                const durationMinutes = (durationMs / 60000).toFixed(2);
+                const durationSeconds = Math.round(durationMs / 1000);
+                
+                // Salvar no localStorage
+                const sessions = getSessions();
+                sessions.push({
+                    entryTime: entryTime.toISOString(),
+                    exitTime: exitTime.toISOString(),
+                    durationMs: durationMs
+                });
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+
+                console.log(`%c[Reunião Analytics] Usuário saiu às: ${exitTime.toLocaleTimeString()}`, 'color: orange; font-weight: bold;');
+                console.log(`%c[Reunião Analytics] Duração: ${durationMinutes} minutos (${durationSeconds} segundos)`, 'color: cyan; font-weight: bold;');
+                // Enviar log para o servidor interno ignorando webhooks que podem falhar no localhost
+                if (userId) {
+                    const payload = JSON.stringify({
+                        meetingId: meetingNumber,
+                        userId: userId,
+                        joinTime: entryTime.toISOString(),
+                        leaveTime: exitTime.toISOString(),
+                        durationMinutes: Math.round(durationMs / 60000)
+                    });
+                    
+                    if (navigator.sendBeacon) {
+                        navigator.sendBeacon('/api/meeting-logs/sync', payload);
+                    } else {
+                        // Fallback
+                        fetch('/api/meeting-logs/sync', {
+                            method: 'POST',
+                            body: payload,
+                            keepalive: true
+                        }).catch(e => console.error(e));
+                    }
+                }
+                
+                // Previne registros duplicados se o evento disparar mais de uma vez
+                entryTime = null;
+            }
+        });
+
+        if (typeof ZoomMtg !== 'undefined') {
+            ZoomMtg.setZoomJSLib('https://source.zoom.us/6.2.0/lib', '/av');
+            ZoomMtg.preLoadWasm();
+            ZoomMtg.prepareWebSDK();
+
+            ZoomMtg.init({
+                leaveUrl: leaveUrl,
+                success: function () {
+                    ZoomMtg.join({
+                        sdkKey: sdkKey,
+                        signature: signature,
+                        meetingNumber: meetingNumber,
+                        passWord: passWord || '',
+                        userName: userName || 'Participante',
+                        userEmail: userEmail || '',
+                        success: function (res) {
+                            entryTime = new Date();
+                            console.log(`%c[Reunião Analytics] Usuário entrou às: ${entryTime.toLocaleTimeString()}`, 'color: #00ff00; font-weight: bold;');
+                            console.log('join meeting success');
+                        },
+                        error: function (res) {
+                            console.log(res);
+                        }
+                    });
+                },
+                error: function (res) {
+                    console.log(res);
+                }
+            });
+        }
+    </script>
+</body>
+</html>
