@@ -31,7 +31,7 @@ export default async function OnboardingPage() {
     redirect('/')
   }
 
-  // @ts-ignore
+
   if (user.onboardingCompleted) {
     if (user.role === 'admin') {
       redirect('/admin/dashboard')

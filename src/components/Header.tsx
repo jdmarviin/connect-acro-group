@@ -37,9 +37,9 @@ export default async function Header() {
     return null;
   }
 
-  // @ts-ignore
+
   const userName = user.name || 'Usuário'
-  // @ts-ignore
+
   const userAvatar = user.avatar_url || ''
 
   return (

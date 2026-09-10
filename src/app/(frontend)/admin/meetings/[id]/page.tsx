@@ -25,7 +25,7 @@ export default async function AdminMeetingDetail({ params }: PageProps) {
     try {
       const decoded = jwt.verify(match[1], process.env.PAYLOAD_SECRET!) as { id: string | number }
       adminUser = await payload.findByID({ collection: 'users', id: decoded.id })
-    } catch (e) {}
+    } catch {}
   }
 
   if (!adminUser || adminUser.role !== 'admin') {
@@ -38,7 +38,7 @@ export default async function AdminMeetingDetail({ params }: PageProps) {
       collection: 'meetings',
       id: resolvedParams.id,
     });
-  } catch (e) {
+  } catch {
     notFound();
   }
 
@@ -61,6 +61,7 @@ export default async function AdminMeetingDetail({ params }: PageProps) {
   });
 
   // Group logs by user
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const userLogsMap = new Map<string, any>();
   
   relevantLogs.forEach(log => {

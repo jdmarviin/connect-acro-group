@@ -25,7 +25,7 @@ export default async function AdminDashboard() {
     try {
       const decoded = jwt.verify(match[1], process.env.PAYLOAD_SECRET!) as { id: string | number }
       adminUser = await payload.findByID({ collection: 'users', id: decoded.id })
-    } catch (e) {}
+    } catch {}
   }
 
   // Security: Ensure only admins access this

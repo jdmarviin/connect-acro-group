@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@/payload.config'
-import { cookies } from 'next/headers'
+
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
 
@@ -66,6 +66,7 @@ export async function GET(request: Request) {
   // 3. Find or Create Payload User
   const payload = await getPayload({ config })
   
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let user: any = null
 
   const existingUsers = await payload.find({

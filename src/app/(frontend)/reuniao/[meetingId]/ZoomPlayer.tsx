@@ -19,6 +19,7 @@ export default function ZoomPlayer({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const entryTimeRef = useRef<Date | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const initialized = typeof window !== 'undefined' ? (window as any).__zoomInitialized : false;
 
   useEffect(() => {
@@ -46,6 +47,7 @@ export default function ZoomPlayer({
 
   useEffect(() => {
     if (initialized) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__zoomInitialized = true;
 
     // Fetch signature
@@ -106,10 +108,12 @@ export default function ZoomPlayer({
           }).then(() => {
             entryTimeRef.current = new Date()
             console.log(`%c[Reunião Analytics] Usuário entrou às: ${entryTimeRef.current.toLocaleTimeString()}`, 'color: #00ff00; font-weight: bold;')
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           }).catch((err: any) => {
             console.error('Join Meeting Error', err)
             setError('Erro ao entrar na reunião.')
           })
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         }).catch((err: any) => {
           console.error('Zoom SDK Init Error', err)
           setError('Erro ao inicializar o player do Zoom.')

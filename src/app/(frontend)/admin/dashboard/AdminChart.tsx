@@ -8,6 +8,7 @@ const getStatusColor = (status: string) => {
   return "#3b82f6"; // blue-500
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default function AdminChart({ data }: { data: any[] }) {
   if (!data || data.length === 0) {
     return <div className="text-acro-silver-dark text-sm text-center pt-20">Dados insuficientes.</div>;

@@ -31,7 +31,8 @@ export default function UserChart({ data }: { data: { date: string, duration: nu
           cursor={{ fill: 'rgba(255,255,255,0.05)' }}
           contentStyle={{ backgroundColor: '#0A0A0A', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }}
           itemStyle={{ color: '#fff' }}
-          formatter={(value: number) => [`${value} minutos`, 'Tempo Assistido']}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          formatter={(value: any) => [`${value} minutos`, 'Tempo Assistido']}
           labelStyle={{ color: '#B8BCC2', marginBottom: '8px' }}
         />
         <Bar 

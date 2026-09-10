@@ -20,14 +20,14 @@ export default function AuthPage() {
         </p>
 
         {/* Zoom Login Button */}
-        <a
+        <Link
           href="/api/auth/zoom"
           className="w-full group relative inline-flex items-center justify-center gap-3 px-6 py-4 bg-acro-blue text-white rounded-xl font-bold hover:bg-acro-blue-light transition-all shadow-lg shadow-acro-blue/20 active:scale-[0.98]"
         >
           <Video className="w-5 h-5" />
           Autenticar com Zoom
           <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-        </a>
+        </Link>
 
         {/* Bypass link for prototype */}
         <Link

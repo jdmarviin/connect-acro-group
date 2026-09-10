@@ -10,10 +10,11 @@ export async function POST(request: Request) {
     const timestamp = request.headers.get('x-zm-request-timestamp')
     
     const bodyText = await request.text()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let body: any = {}
     try {
       body = JSON.parse(bodyText)
-    } catch (e) {
+    } catch {
       return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
     }
 

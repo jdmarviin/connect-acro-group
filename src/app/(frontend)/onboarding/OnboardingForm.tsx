@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default function OnboardingForm({ user }: { user: any }) {
   const router = useRouter()
   const [step, setStep] = useState(1)

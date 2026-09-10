@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, User, Mail, MessageCircle, Clock, Calendar as CalendarIcon, Video } from "lucide-react";
+import { ArrowLeft, Mail, MessageCircle, Clock, Calendar as CalendarIcon, Video } from "lucide-react";
 import { getPayload } from 'payload'
 import configPromise from '@/payload.config'
 import { headers as getHeaders } from 'next/headers'
@@ -26,7 +26,7 @@ export default async function AdminUserDetail({ params }: PageProps) {
     try {
       const decoded = jwt.verify(match[1], process.env.PAYLOAD_SECRET!) as { id: string | number }
       adminUser = await payload.findByID({ collection: 'users', id: decoded.id })
-    } catch (e) {}
+    } catch {}
   }
 
   if (!adminUser || adminUser.role !== 'admin') {
@@ -39,7 +39,7 @@ export default async function AdminUserDetail({ params }: PageProps) {
       collection: 'users',
       id: resolvedParams.id,
     });
-  } catch (e) {
+  } catch {
     notFound();
   }
 

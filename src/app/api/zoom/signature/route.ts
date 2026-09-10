@@ -18,7 +18,7 @@ export async function POST(request: Request) {
 
     const iat = Math.round((new Date().getTime() - 30000) / 1000)
     const exp = iat + 60 * 60 * 2 // 2 hours
-    const oHeader = { alg: 'HS256', typ: 'JWT' }
+
 
     const payload = {
       sdkKey: zoomClientId,

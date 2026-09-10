@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { PlayCircle, Clock, Calendar, CheckCircle2, ChevronRight, AlertCircle } from "lucide-react";
+import { PlayCircle, Clock, Calendar, CheckCircle2, ChevronRight } from "lucide-react";
 import { getPayload } from 'payload'
 import configPromise from '@/payload.config'
 import { headers as getHeaders } from 'next/headers'
@@ -18,7 +18,7 @@ export default async function ParticipantDashboard() {
     try {
       const decoded = jwt.verify(match[1], process.env.PAYLOAD_SECRET!) as { id: string | number }
       user = await payload.findByID({ collection: 'users', id: decoded.id })
-    } catch (e) {}
+    } catch {}
   }
 
   if (!user) {
@@ -39,10 +39,12 @@ export default async function ParticipantDashboard() {
   });
   
   // Find live meeting (within 15 minutes before or during the meeting duration)
-  let liveMeeting = null;
-  const meetings = upcomingMeetingsReq.docs.map(m => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let liveMeeting: any = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const meetings = upcomingMeetingsReq.docs.map((m: any) => {
     const meetingDate = new Date(m.date);
-    // @ts-ignore
+
     const endTime = new Date(meetingDate.getTime() + (m.durationMinutes || 60) * 60000);
     const isLive = now >= new Date(meetingDate.getTime() - 15 * 60000) && now <= endTime;
     

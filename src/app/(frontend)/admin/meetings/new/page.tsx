@@ -14,7 +14,7 @@ export default function ScheduleMeeting() {
     formData.append('notify', notify ? 'on' : 'off');
     try {
       await createMeetingAction(formData);
-    } catch (e) {
+    } catch {
       alert("Erro ao criar reunião");
       setLoading(false);
     }

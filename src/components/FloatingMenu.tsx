@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, CalendarPlus, Users, LogOut, Video, Image as ImageIcon } from "lucide-react";
+import { LayoutDashboard, CalendarPlus, LogOut, Image as ImageIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export default function FloatingMenu() {

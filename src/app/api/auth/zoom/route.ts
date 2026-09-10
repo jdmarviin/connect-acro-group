@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 
-export async function GET(request: Request) {
-  const url = new URL(request.url)
+export async function GET() {
+
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
   const redirectUri = `${appUrl}/api/auth/zoom/callback`
 

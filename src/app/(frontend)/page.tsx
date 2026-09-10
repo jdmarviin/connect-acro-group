@@ -23,7 +23,7 @@ export default async function Home() {
       const payload = await getPayload({ config: configPromise });
       const decoded = jwt.verify(payloadToken, process.env.PAYLOAD_SECRET!) as { id: string };
       user = await payload.findByID({ collection: "users", id: decoded.id });
-    } catch (error) {
+    } catch {
       // Token invalid or expired
     }
   }

@@ -42,14 +42,14 @@ export default async function ReuniaoPage({
     redirect('/')
   }
 
-  // @ts-ignore
+
   if (!user.onboardingCompleted) {
     redirect('/onboarding')
   }
 
   // O Zoom precisa de um email válido e um nome
   const userEmail = user.email || 'user@example.com'
-  // @ts-ignore
+
   const userName = user.name || 'Usuário'
 
   const xForwardedProto = headersList.get('x-forwarded-proto')
@@ -67,7 +67,7 @@ export default async function ReuniaoPage({
     sdkKey: zoomClientId,
     appKey: zoomClientId,
     mn: meetingId,
-    // @ts-ignore
+
     role: user.role === 'admin' ? 1 : 0,
     iat: iat,
     exp: exp,
