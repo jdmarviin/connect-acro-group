@@ -25,7 +25,9 @@ export default function OnboardingForm({ user }: { user: any }) {
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
-  const handleNext = () => setStep(step + 1)
+  const handleNext = (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (event.currentTarget.form?.reportValidity()) setStep(step + 1)
+  }
   const handlePrev = () => setStep(step - 1)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -41,9 +43,11 @@ export default function OnboardingForm({ user }: { user: any }) {
       })
       
       if (res.ok) {
-        router.push('/welcome')
+        router.push('/dashboard')
+        router.refresh()
       } else {
-        alert('Ocorreu um erro ao salvar seus dados.')
+        const result = await res.json()
+        alert(result.error || 'Ocorreu um erro ao salvar seus dados.')
       }
     } catch (error) {
       console.error(error)

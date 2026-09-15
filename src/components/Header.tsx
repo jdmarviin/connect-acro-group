@@ -1,37 +1,17 @@
-import { headers as getHeaders, cookies } from 'next/headers'
-import jwt from 'jsonwebtoken'
-import { getPayload } from 'payload'
-import configPromise from '@/payload.config'
+import { cookies } from 'next/headers'
+import { currentUser } from '@/lib/auth'
 import Image from 'next/image'
 import LanguageSwitcher from './LanguageSwitcher'
 import { getDictionary, Locale } from '@/i18n/dictionaries'
 
 export default async function Header() {
-  const payload = await getPayload({ config: configPromise })
-  const headers = await getHeaders()
   const cookieStore = await cookies()
   
   const localeCookie = cookieStore.get("NEXT_LOCALE")?.value as Locale;
   const locale = localeCookie === "ht" ? "ht" : "pt";
   const t = getDictionary(locale).header;
 
-  let user = null;
-  try {
-    const cookieHeader = headers.get('cookie') || ''
-    const match = cookieHeader.match(/payload-token=([^;]+)/)
-    
-    if (match && match[1]) {
-      const token = match[1]
-      const decoded = jwt.verify(token, process.env.PAYLOAD_SECRET!) as { id: string | number, collection: string }
-      
-      user = await payload.findByID({
-        collection: 'users',
-        id: decoded.id,
-      })
-    }
-  } catch (error) {
-    console.error('Erro ao verificar JWT no Header:', error)
-  }
+  const user = await currentUser();
 
   if (!user) {
     return null;

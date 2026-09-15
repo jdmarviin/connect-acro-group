@@ -1,9 +1,10 @@
+import RefreshStatus from '@/components/RefreshStatus'
+import { isLeadLog, belongsToMeeting } from '@/lib/reporting';
 import Link from "next/link";
 import { Users, Video, Activity, MessageCircle, Mail, Flame, ThermometerSun, Snowflake, ChevronRight, Calendar, Play } from "lucide-react";
 import { getPayload } from 'payload'
 import configPromise from '@/payload.config'
-import { headers as getHeaders } from 'next/headers'
-import jwt from 'jsonwebtoken'
+import { currentUser } from '@/lib/auth'
 import { redirect } from "next/navigation";
 import AdminChart from "./AdminChart"; // Client component wrapper for Recharts
 
@@ -15,20 +16,9 @@ const getStatusColor = (status: string) => {
 
 export default async function AdminDashboard() {
   const payload = await getPayload({ config: configPromise })
-  const headers = await getHeaders()
   
-  let adminUser = null;
-  const cookieHeader = headers.get('cookie') || ''
-  const match = cookieHeader.match(/payload-token=([^;]+)/)
-  
-  if (match && match[1]) {
-    try {
-      const decoded = jwt.verify(match[1], process.env.PAYLOAD_SECRET!) as { id: string | number }
-      adminUser = await payload.findByID({ collection: 'users', id: decoded.id })
-    } catch {}
-  }
+  const adminUser = await currentUser();
 
-  // Security: Ensure only admins access this
   if (!adminUser || adminUser.role !== 'admin') {
     redirect('/dashboard') // Redirect non-admins
   }
@@ -39,20 +29,21 @@ export default async function AdminDashboard() {
     where: {
       role: { equals: 'user' }
     },
-    limit: 100,
+    pagination: false,
   });
 
   // Fetch all meetings
   const meetingsReq = await payload.find({
     collection: 'meetings',
     sort: '-date',
-    limit: 50,
+    pagination: false,
   });
 
   // Fetch all meeting logs
   const logsReq = await payload.find({
     collection: 'meeting-logs',
-    limit: 5000,
+    pagination: false,
+    depth: 1,
   });
 
   const now = new Date();
@@ -64,7 +55,7 @@ export default async function AdminDashboard() {
     const daysRemaining = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
 
     // Calculate real engagement from logs
-    const userLogs = logsReq.docs.filter(log => {
+    const userLogs = logsReq.docs.filter(isLeadLog).filter(log => {
       const logUserId = typeof log.user === 'object' && log.user ? log.user.id : log.user;
       return logUserId === lead.id;
     });
@@ -74,8 +65,8 @@ export default async function AdminDashboard() {
     const engagement = Math.min(100, Math.round((totalDuration / 600) * 100));
     
     let status = "frio";
-    if (engagement >= 70) status = "quente";
-    else if (engagement >= 30) status = "morno";
+    if (totalDuration >= 420) status = "quente";
+    else if (totalDuration >= 180) status = "morno";
 
     return {
       id: lead.id,
@@ -87,20 +78,14 @@ export default async function AdminDashboard() {
       totalDuration,
       status
     }
-  }).sort((a, b) => b.engagement - a.engagement);
+  }).sort((a, b) => b.totalDuration - a.totalDuration);
 
   const processedMeetings = meetingsReq.docs.map(meeting => {
     const meetingDate = new Date(meeting.date);
-    const startOfDay = new Date(meetingDate);
-    startOfDay.setHours(0,0,0,0);
-    const endOfDay = new Date(meetingDate);
-    endOfDay.setHours(23,59,59,999);
 
     // Find logs for this meeting's zoom ID on this specific day
-    const meetingLogs = logsReq.docs.filter(log => {
-      if (log.meetingId !== meeting.zoomMeetingId) return false;
-      const joinTime = log.joinTime ? new Date(log.joinTime) : new Date(log.createdAt);
-      return joinTime >= startOfDay && joinTime <= endOfDay;
+    const meetingLogs = logsReq.docs.filter(isLeadLog).filter(log => {
+      return belongsToMeeting(log, meeting);
     });
 
     // Count unique users
@@ -111,6 +96,7 @@ export default async function AdminDashboard() {
     return {
       id: meeting.id,
       title: meeting.title,
+      status: meeting.status,
       date: meetingDate,
       uniqueUsers,
       zoomMeetingId: meeting.zoomMeetingId,
@@ -121,6 +107,7 @@ export default async function AdminDashboard() {
 
   return (
     <div className="max-w-6xl mx-auto px-6 pt-12 pb-32">
+      <RefreshStatus />
       <header className="mb-10">
         <h1 className="text-3xl font-bold text-white tracking-tight">Painel Comercial</h1>
         <p className="text-acro-silver-dark mt-1">Visão geral do engajamento dos leads no período gratuito.</p>
@@ -134,7 +121,7 @@ export default async function AdminDashboard() {
           </div>
           <div>
             <div className="text-sm font-medium text-acro-silver-dark">Leads Ativos (Trial)</div>
-            <div className="text-2xl font-bold text-white">{leadsReq.totalDocs}</div>
+            <div className="text-2xl font-bold text-white">{rankedLeads.filter(lead => lead.daysRemaining > 0).length}</div>
           </div>
         </div>
         
@@ -194,6 +181,7 @@ export default async function AdminDashboard() {
                     <tr key={meeting.id} className="group hover:bg-white/[0.02] transition-colors">
                       <td className="py-4">
                         <div className="font-semibold text-white">{meeting.title}</div>
+                        <div className="text-xs text-acro-silver-dark">{meeting.status === "live" ? "Ao vivo" : meeting.status === "ended" ? "Encerrada" : "Agendada"}</div>
                       </td>
                       <td className="py-4 text-center text-sm text-acro-silver">
                         {meeting.date.toLocaleDateString('pt-BR')} às {meeting.date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
@@ -214,7 +202,7 @@ export default async function AdminDashboard() {
                             const pwd = pwdMatch ? pwdMatch[1] : '';
                             const href = `/reuniao/${meeting.zoomMeetingId || meeting.id}${pwd ? `?pwd=${pwd}` : ''}`;
                             return (
-                              <Link href={href} className="inline-flex items-center justify-center p-2 rounded-lg bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white transition-colors" title="Iniciar Sala (Como Anfitrião)">
+                              <Link href={meeting.zoomLink || href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center p-2 rounded-lg bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white transition-colors" title="Abrir no Zoom com a conta do anfitrião">
                                 <Play className="w-4 h-4" />
                               </Link>
                             );
@@ -276,7 +264,7 @@ export default async function AdminDashboard() {
                         </div>
                       </td>
                       <td className="py-4 text-center">
-                        <div className="font-medium text-white">{lead.totalDuration} min</div>
+                        <div className="font-medium text-white">{lead.totalDuration.toFixed(2)} min</div>
                         <div className="w-24 h-1.5 bg-white/10 rounded-full mx-auto mt-1.5 overflow-hidden">
                           <div 
                             className="h-full rounded-full" 
@@ -316,7 +304,7 @@ export default async function AdminDashboard() {
              <AdminChart data={rankedLeads} />
           </div>
           <div className="mt-4 p-4 rounded-xl bg-white/5 border border-white/10 text-xs text-acro-silver-dark leading-relaxed">
-            Gráfico visualizando a porcentagem do tempo total que cada lead passa dentro das reuniões operacionais.
+            Pontuação por tempo assistido: 600 minutos correspondem a 100%. Quente a partir de 420 minutos; morno a partir de 180 minutos.
           </div>
         </div>
 

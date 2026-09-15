@@ -1,0 +1,28 @@
+import { getPayload } from 'payload'
+import config from './src/payload.config'
+
+async function run() {
+  try {
+    const payload = await getPayload({ config })
+    const logs = await payload.find({
+      collection: 'meeting-logs',
+      where: {
+        user: { exists: false }
+      },
+      limit: 1000
+    })
+    
+    console.log(`Found ${logs.docs.length} logs with null user.`)
+    
+    for (const log of logs.docs) {
+      // Zoom Webhook doesn't save the userName in the log natively, but wait!
+      // Do we have the zoom user ID? Yes.
+      // Do we have the user name in the webhook? We didn't save it in meeting-logs!
+      // So we can't retrospectively fix it by name unless we have the zoom API to get participant details.
+      console.log(`Log ${log.id} has zoomUserId: ${log.zoomUserId}`)
+    }
+  } catch (error) {
+    console.error(error)
+  }
+}
+run()

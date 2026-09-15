@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, CalendarPlus, LogOut, Image as ImageIcon } from "lucide-react";
+import { LayoutDashboard, CalendarPlus, LogOut } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export default function FloatingMenu() {
@@ -22,14 +22,12 @@ export default function FloatingMenu() {
 
   const adminLinks = [
     { href: "/admin/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { href: "/feed", icon: ImageIcon, label: "Feed" },
     { href: "/admin/meetings/new", icon: CalendarPlus, label: "Agendar" },
     { href: "/", icon: LogOut, label: "Sair" },
   ];
 
   const userLinks = [
     { href: "/dashboard", icon: LayoutDashboard, label: "Meu Progresso" },
-    { href: "/feed", icon: ImageIcon, label: "Feed" },
     { href: "/", icon: LogOut, label: "Sair" },
   ];
 

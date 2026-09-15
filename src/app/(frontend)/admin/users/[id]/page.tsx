@@ -1,9 +1,9 @@
+import { isLeadLog } from '@/lib/reporting';
 import Link from "next/link";
 import { ArrowLeft, Mail, MessageCircle, Clock, Calendar as CalendarIcon, Video } from "lucide-react";
 import { getPayload } from 'payload'
 import configPromise from '@/payload.config'
-import { headers as getHeaders } from 'next/headers'
-import jwt from 'jsonwebtoken'
+import { currentUser } from '@/lib/auth'
 import { redirect, notFound } from "next/navigation";
 import UserChart from "./UserChart";
 
@@ -16,18 +16,8 @@ interface PageProps {
 export default async function AdminUserDetail({ params }: PageProps) {
   const resolvedParams = await params;
   const payload = await getPayload({ config: configPromise })
-  const headers = await getHeaders()
   
-  let adminUser = null;
-  const cookieHeader = headers.get('cookie') || ''
-  const match = cookieHeader.match(/payload-token=([^;]+)/)
-  
-  if (match && match[1]) {
-    try {
-      const decoded = jwt.verify(match[1], process.env.PAYLOAD_SECRET!) as { id: string | number }
-      adminUser = await payload.findByID({ collection: 'users', id: decoded.id })
-    } catch {}
-  }
+  const adminUser = await currentUser();
 
   if (!adminUser || adminUser.role !== 'admin') {
     redirect('/dashboard')
@@ -43,20 +33,23 @@ export default async function AdminUserDetail({ params }: PageProps) {
     notFound();
   }
 
+  if (leadUser.role !== 'user') notFound();
+
   // Fetch all meeting logs for this user
   const logsReq = await payload.find({
     collection: 'meeting-logs',
     where: {
       user: { equals: leadUser.id }
     },
-    limit: 5000,
+    pagination: false,
+    depth: 1,
     sort: '-createdAt'
   });
 
   // Fetch scheduled meetings to map zoomMeetingId to titles if possible
   const meetingsReq = await payload.find({
     collection: 'meetings',
-    limit: 1000,
+    pagination: false,
   });
 
   const meetingsMap = new Map();
@@ -67,7 +60,7 @@ export default async function AdminUserDetail({ params }: PageProps) {
   // Group logs by day
   const dailyStats = new Map<string, number>();
   
-  const detailedLogs = logsReq.docs.map(log => {
+  const detailedLogs = logsReq.docs.filter(isLeadLog).map(log => {
     const joinTime = log.joinTime ? new Date(log.joinTime) : new Date(log.createdAt);
     const dateStr = joinTime.toLocaleDateString('pt-BR'); // Format: DD/MM/YYYY
     const duration = log.durationMinutes || 0;
@@ -126,7 +119,7 @@ export default async function AdminUserDetail({ params }: PageProps) {
           <Clock className="w-5 h-5 text-acro-silver" />
           <div>
             <div className="text-xs font-semibold text-acro-silver-dark uppercase tracking-wider">Tempo Total</div>
-            <div className="text-lg font-bold text-white">{totalWatched} minutos</div>
+            <div className="text-lg font-bold text-white">{totalWatched.toFixed(2)} minutos</div>
           </div>
         </div>
       </header>
@@ -186,7 +179,7 @@ export default async function AdminUserDetail({ params }: PageProps) {
                           )}
                         </td>
                         <td className="py-4 text-right">
-                          <div className="font-medium text-white">{log.durationMinutes} min</div>
+                          <div className="font-medium text-white">{log.durationMinutes.toFixed(2)} min</div>
                         </td>
                       </tr>
                     ))}

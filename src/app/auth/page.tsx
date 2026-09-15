@@ -29,14 +29,6 @@ export default function AuthPage() {
           <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
         </Link>
 
-        {/* Bypass link for prototype */}
-        <Link
-          href="/dashboard"
-          className="mt-6 text-xs font-medium text-acro-silver hover:text-white transition-colors"
-        >
-          Pular para o Painel (Apenas Protótipo)
-        </Link>
-        
         <p className="mt-8 text-xs text-acro-silver-dark/60">
           Ao continuar, você concorda com nossos Termos de Serviço.
         </p>

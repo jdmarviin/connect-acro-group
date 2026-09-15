@@ -3,9 +3,7 @@ import { ArrowRight, Video, Target, TrendingUp } from "lucide-react";
 import { getDictionary, Locale } from "@/i18n/dictionaries";
 import { cookies } from "next/headers";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
-import { getPayload } from "payload";
-import configPromise from "@/payload.config";
-import jwt from "jsonwebtoken";
+import { currentUser } from '@/lib/auth';
 import Image from "next/image";
 
 export default async function Home() {
@@ -15,18 +13,7 @@ export default async function Home() {
   const t = getDictionary(locale).landing;
 
   // Verify User Session
-  const payloadToken = cookieStore.get("payload-token")?.value;
-  let user = null;
-
-  if (payloadToken) {
-    try {
-      const payload = await getPayload({ config: configPromise });
-      const decoded = jwt.verify(payloadToken, process.env.PAYLOAD_SECRET!) as { id: string };
-      user = await payload.findByID({ collection: "users", id: decoded.id });
-    } catch {
-      // Token invalid or expired
-    }
-  }
+  const user = await currentUser();
 
   return (
     <div className="flex flex-col items-center min-h-screen pt-20 pb-12 px-6">

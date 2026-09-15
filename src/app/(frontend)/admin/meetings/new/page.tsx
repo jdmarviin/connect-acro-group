@@ -2,20 +2,27 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowLeft, Calendar, Link as LinkIcon, Bell, MessageCircle, Mail, Smartphone } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Calendar, Link as LinkIcon } from "lucide-react";
 import { createMeetingAction } from "./actions";
 
 export default function ScheduleMeeting() {
-  const [notify, setNotify] = useState(true);
+  const router = useRouter();
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (formData: FormData) => {
     setLoading(true);
-    formData.append('notify', notify ? 'on' : 'off');
+    setError('');
+    const scheduled = new Date(`${formData.get('date')}T${formData.get('time')}:00`);
+    if (!Number.isFinite(scheduled.getTime())) { setError('Data inválida.'); setLoading(false); return; }
+    formData.set('scheduledAt', scheduled.toISOString());
     try {
       await createMeetingAction(formData);
-    } catch {
-      alert("Erro ao criar reunião");
+      router.push("/admin/dashboard");
+      router.refresh();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Erro ao criar reunião");
       setLoading(false);
     }
   };
@@ -78,47 +85,17 @@ export default function ScheduleMeeting() {
               <input 
                 type="url" 
                 name="zoomLink"
-                placeholder="https://zoom.us/j/123456789 (Deixe em branco para gerar automaticamente)" 
+                required
+                placeholder="https://zoom.us/j/123456789"
                 className="w-full bg-acro-dark/50 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-white placeholder-white/20 focus:outline-none focus:border-acro-blue/50 focus:ring-1 focus:ring-acro-blue/50 transition-all"
               />
             </div>
-            <p className="text-xs text-acro-silver-dark mt-1">Se não preenchido, o sistema criará uma sala Zoom automaticamente.</p>
+            <p className="text-xs text-acro-silver-dark mt-1">Crie a reunião na conta do trader no Zoom e cole o link completo, incluindo a senha. Horário no fuso do seu navegador.</p>
           </div>
         </div>
 
-        <div className="pt-6 border-t border-white/10">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="font-semibold text-white flex items-center gap-2">
-                <Bell className="w-5 h-5 text-acro-blue-light" />
-                Notificar participantes ativos
-              </h3>
-              <p className="text-sm text-acro-silver-dark mt-1">
-                Dispara um aviso para a base de usuários que estão dentro do período de Trial.
-              </p>
-              
-              <div className={`flex items-center gap-4 mt-4 transition-opacity ${notify ? 'opacity-100' : 'opacity-30 grayscale'}`}>
-                <div className="flex items-center gap-1.5 text-xs font-medium text-acro-silver bg-white/5 px-2.5 py-1 rounded-md border border-white/10">
-                  <Smartphone className="w-3.5 h-3.5" /> Push Sistema
-                </div>
-                <div className="flex items-center gap-1.5 text-xs font-medium text-acro-silver bg-white/5 px-2.5 py-1 rounded-md border border-white/10">
-                  <MessageCircle className="w-3.5 h-3.5 text-green-400" /> WhatsApp
-                </div>
-                <div className="flex items-center gap-1.5 text-xs font-medium text-acro-silver bg-white/5 px-2.5 py-1 rounded-md border border-white/10">
-                  <Mail className="w-3.5 h-3.5 text-blue-400" /> E-mail
-                </div>
-              </div>
-            </div>
-            
-            <button 
-              type="button"
-              onClick={() => setNotify(!notify)}
-              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${notify ? 'bg-acro-blue' : 'bg-white/20'}`}
-            >
-              <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${notify ? 'translate-x-6' : 'translate-x-1'}`} />
-            </button>
-          </div>
-        </div>
+        <p className="text-sm text-acro-silver-dark">Notificações pelo sistema, WhatsApp e e-mail serão disponibilizadas em uma etapa separada.</p>
+        {error && <p role="alert" className="text-red-400">{error}</p>}
 
         <div className="pt-8 flex justify-end">
           <button 

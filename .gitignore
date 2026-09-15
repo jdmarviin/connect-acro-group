@@ -38,3 +38,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Template sem credenciais deve acompanhar o projeto
+!.env.example

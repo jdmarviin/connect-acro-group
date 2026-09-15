@@ -1,11 +1,18 @@
 import type { CollectionConfig } from 'payload'
+import { adminOnly, ownerOrAdmin } from '../lib/access'
 
 export const Users: CollectionConfig = {
   slug: 'users',
   admin: {
     useAsTitle: 'name',
   },
-  auth: true,
+  auth: { useSessions: false, tokenExpiration: 86400, cookies: { sameSite: 'Lax', secure: process.env.NODE_ENV === 'production' } },
+  access: { admin: ({ req }) => req.user?.role === 'admin', create: adminOnly, unlock: adminOnly, read: ownerOrAdmin, update: ownerOrAdmin, delete: adminOnly },
+  hooks: { beforeChange: [({ data, originalDoc, operation }) => {
+    // Trial start is server-owned, including updates through the generated REST API.
+    data.createdAt = operation === 'create' ? new Date().toISOString() : originalDoc.createdAt
+    return data
+  }] },
   fields: [
     {
       name: 'name',
@@ -15,6 +22,7 @@ export const Users: CollectionConfig = {
     },
     {
       name: 'role',
+      access: { create: ({ req }) => req.user?.role === 'admin', update: ({ req }) => req.user?.role === 'admin' },
       type: 'select',
       label: 'Papel do Usuário',
       options: [
@@ -31,6 +39,7 @@ export const Users: CollectionConfig = {
     },
     {
       name: 'zoomId',
+      access: { create: () => false, update: () => false },
       type: 'text',
       label: 'Zoom ID',
       admin: {
@@ -104,6 +113,7 @@ export const Users: CollectionConfig = {
     },
     {
       name: 'onboardingCompleted',
+      access: { create: () => false, update: () => false },
       type: 'checkbox',
       label: 'Onboarding Concluído',
       defaultValue: false,

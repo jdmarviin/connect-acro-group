@@ -1,10 +1,13 @@
 import Header from "@/components/Header";
 
-export default function AdminLayout({
+import { requireAdmin } from '@/lib/auth';
+
+export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  await requireAdmin();
   return (
     <>
       <Header />

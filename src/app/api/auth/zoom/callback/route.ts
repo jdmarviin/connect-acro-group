@@ -4,10 +4,18 @@ import config from '@/payload.config'
 
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
+import { cookies } from 'next/headers'
 
 export async function GET(request: Request) {
   const url = new URL(request.url)
   const code = url.searchParams.get('code')
+  const cookieStore = await cookies()
+  const expectedState = cookieStore.get('zoom-oauth-state')?.value
+  const state = url.searchParams.get('state')
+  cookieStore.delete('zoom-oauth-state')
+  if (!state || !expectedState || state.length !== expectedState.length || !crypto.timingSafeEqual(Buffer.from(state), Buffer.from(expectedState))) {
+    return NextResponse.json({ error: 'Sessão OAuth inválida. Inicie o login novamente.' }, { status: 400 })
+  }
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
   const redirectUri = `${appUrl}/api/auth/zoom/callback`
 
@@ -55,7 +63,7 @@ export async function GET(request: Request) {
   }
 
   const zoomUser = await userResponse.json()
-  console.log('--- ZOOM LOGIN DATA ---', zoomUser);
+  if (!zoomUser.email || !zoomUser.id) return NextResponse.json({ error: 'O Zoom não retornou a identidade e o e-mail.' }, { status: 502 })
   
   const email = zoomUser.email
   const name = `${zoomUser.first_name || ''} ${zoomUser.last_name || ''}`.trim()
@@ -79,7 +87,9 @@ export async function GET(request: Request) {
   })
 
   if (existingUsers.docs.length > 0) {
-    user = existingUsers.docs[0]
+    const existing = existingUsers.docs[0]
+    if (existing.zoomId && existing.zoomId !== zoomId) return NextResponse.json({ error: 'Conta Zoom divergente.' }, { status: 403 })
+    user = await payload.update({ collection: 'users', id: existing.id, data: { zoomId, avatar_url } })
   } else {
     // Generate a random password since payload auth requires it
     const randomPassword = crypto.randomBytes(20).toString('hex')
@@ -88,6 +98,7 @@ export async function GET(request: Request) {
       collection: 'users',
       data: {
         email,
+        role: 'user',
         password: randomPassword,
         name,
         zoomId,
@@ -104,16 +115,17 @@ export async function GET(request: Request) {
       id: user.id, 
       collection: 'users' 
     },
-    process.env.PAYLOAD_SECRET!,
+    payload.secret,
     {
       expiresIn: '24h',
     }
   )
 
-  const response = NextResponse.redirect(`${appUrl}/onboarding`)
+  const response = NextResponse.redirect(`${appUrl}${user.role === 'admin' ? '/admin/dashboard' : user.onboardingCompleted ? '/dashboard' : '/onboarding'}`)
   
   response.cookies.set('payload-token', token, {
     httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
     path: '/',
     maxAge: 60 * 60 * 24, // 24 hours
     sameSite: 'lax',

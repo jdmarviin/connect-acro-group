@@ -1,9 +1,9 @@
+import { isLeadLog, belongsToMeeting } from '@/lib/reporting';
 import Link from "next/link";
 import { ArrowLeft, Users, Calendar, Clock, Video } from "lucide-react";
 import { getPayload } from 'payload'
 import configPromise from '@/payload.config'
-import { headers as getHeaders } from 'next/headers'
-import jwt from 'jsonwebtoken'
+import { currentUser } from '@/lib/auth'
 import { redirect, notFound } from "next/navigation";
 
 interface PageProps {
@@ -15,18 +15,8 @@ interface PageProps {
 export default async function AdminMeetingDetail({ params }: PageProps) {
   const resolvedParams = await params;
   const payload = await getPayload({ config: configPromise })
-  const headers = await getHeaders()
   
-  let adminUser = null;
-  const cookieHeader = headers.get('cookie') || ''
-  const match = cookieHeader.match(/payload-token=([^;]+)/)
-  
-  if (match && match[1]) {
-    try {
-      const decoded = jwt.verify(match[1], process.env.PAYLOAD_SECRET!) as { id: string | number }
-      adminUser = await payload.findByID({ collection: 'users', id: decoded.id })
-    } catch {}
-  }
+  const adminUser = await currentUser();
 
   if (!adminUser || adminUser.role !== 'admin') {
     redirect('/dashboard')
@@ -44,20 +34,15 @@ export default async function AdminMeetingDetail({ params }: PageProps) {
 
   // Find logs for this meeting's zoom ID on this specific day
   const meetingDate = new Date(meeting.date);
-  const startOfDay = new Date(meetingDate);
-  startOfDay.setHours(0,0,0,0);
-  const endOfDay = new Date(meetingDate);
-  endOfDay.setHours(23,59,59,999);
 
   const logsReq = await payload.find({
     collection: 'meeting-logs',
-    limit: 5000,
+    pagination: false,
+    depth: 1,
   });
 
-  const relevantLogs = logsReq.docs.filter(log => {
-    if (log.meetingId !== meeting.zoomMeetingId) return false;
-    const joinTime = log.joinTime ? new Date(log.joinTime) : new Date(log.createdAt);
-    return joinTime >= startOfDay && joinTime <= endOfDay;
+  const relevantLogs = logsReq.docs.filter(isLeadLog).filter(log => {
+    return belongsToMeeting(log, meeting);
   });
 
   // Group logs by user
@@ -105,8 +90,8 @@ export default async function AdminMeetingDetail({ params }: PageProps) {
             const pwd = pwdMatch ? pwdMatch[1] : '';
             const href = `/reuniao/${meeting.zoomMeetingId || meeting.id}${pwd ? `?pwd=${pwd}` : ''}`;
             return (
-              <Link href={href} className="px-5 py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-bold flex items-center gap-2 transition-colors">
-                <Video className="w-5 h-5" /> Iniciar Sala (Host)
+              <Link href={meeting.zoomLink || href} target="_blank" rel="noopener noreferrer" className="px-5 py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-bold flex items-center gap-2 transition-colors">
+                <Video className="w-5 h-5" /> Abrir no Zoom
               </Link>
             );
           })()}
@@ -151,7 +136,7 @@ export default async function AdminMeetingDetail({ params }: PageProps) {
                       </div>
                     </td>
                     <td className="py-4 text-center font-medium text-white">
-                      {p.totalDuration} min
+                      {p.totalDuration.toFixed(2)} min
                     </td>
                     <td className="py-4 text-right">
                       <Link href={`/admin/users/${p.user.id}`} className="inline-block px-3 py-1.5 rounded-lg bg-acro-blue/10 text-acro-blue-light text-sm hover:bg-acro-blue hover:text-white transition-colors">

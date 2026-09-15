@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic'
 /* THIS FILE WAS GENERATED AUTOMATICALLY BY PAYLOAD. */
 import config from '@/payload.config'
 import '@payloadcms/next/css'

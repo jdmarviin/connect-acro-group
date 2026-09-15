@@ -1,128 +1,45 @@
 import { NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { getPayload } from 'payload'
+import { createLocalReq, getPayload } from 'payload'
 import config from '@/payload.config'
+import { processZoomEvent, supportedEvents, validateZoomEvent, verifyZoomSignature } from '@/lib/zoom-webhook'
 
 export async function POST(request: Request) {
+  const secret = process.env.ZOOM_WEBHOOK_SECRET_TOKEN
+  if (!secret) return NextResponse.json({ error: 'Webhook não configurado.' }, { status: 503 })
+  const text = await request.text()
+  if (!verifyZoomSignature(text, request.headers.get('x-zm-request-timestamp'), request.headers.get('x-zm-signature'), secret)) {
+    return NextResponse.json({ error: 'Invalid signature or timestamp' }, { status: 401 })
+  }
+  let body
+  try { body = JSON.parse(text) } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
+  if (body?.event === 'endpoint.url_validation') {
+    const plainToken = body.payload?.plainToken
+    if (typeof plainToken !== 'string') return NextResponse.json({ error: 'Invalid token' }, { status: 400 })
+    return NextResponse.json({ plainToken, encryptedToken: crypto.createHmac('sha256', secret).update(plainToken).digest('hex') })
+  }
+  if (!supportedEvents.includes(body?.event)) return NextResponse.json({ ignored: true })
+  if (!validateZoomEvent(body)) return NextResponse.json({ error: 'Invalid event payload' }, { status: 400 })
+  if (process.env.ZOOM_ACCOUNT_ID && body.payload.account_id !== process.env.ZOOM_ACCOUNT_ID) return NextResponse.json({ error: 'Unexpected Zoom account' }, { status: 403 })
+  const eventKey = crypto.createHash('sha256').update(JSON.stringify([body.event, body.payload])).digest('hex')
+  const payload = await getPayload({ config })
+  const duplicate = await payload.find({ collection: 'zoom-events', where: { eventKey: { equals: eventKey } }, limit: 1 })
+  if (duplicate.docs.length) return NextResponse.json({ success: true, duplicate: true })
+  const transactionID = await payload.db.beginTransaction()
+  if (transactionID == null) return NextResponse.json({ error: 'Database transaction unavailable' }, { status: 503 })
+  const req = await createLocalReq({}, payload)
+  req.transactionID = transactionID
   try {
-    const zoomWebhookSecret = process.env.ZOOM_WEBHOOK_SECRET_TOKEN
-    const signature = request.headers.get('x-zm-signature')
-    const timestamp = request.headers.get('x-zm-request-timestamp')
-    
-    const bodyText = await request.text()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let body: any = {}
-    try {
-      body = JSON.parse(bodyText)
-    } catch {
-      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-    }
-
-    // 1. Validation Logic for Zoom URL setup
-    if (body.event === 'endpoint.url_validation') {
-      const plainToken = body.payload.plainToken
-      const hashForValidate = crypto.createHmac('sha256', zoomWebhookSecret || '')
-        .update(plainToken)
-        .digest('hex')
-      
-      return NextResponse.json({
-        plainToken: plainToken,
-        encryptedToken: hashForValidate
-      })
-    }
-
-    // 2. Security validation for actual events
-    // https://developers.zoom.us/docs/api/rest/webhook-reference/#verify-webhook-events
-    if (zoomWebhookSecret && signature && timestamp) {
-      const message = `v0:${timestamp}:${bodyText}`
-      const hashForVerify = crypto.createHmac('sha256', zoomWebhookSecret)
-        .update(message)
-        .digest('hex')
-      
-      const signatureHash = `v0=${hashForVerify}`
-      
-      if (signature !== signatureHash) {
-        return NextResponse.json({ error: 'Unauthorized signature' }, { status: 401 })
-      }
-    }
-
-    const payload = await getPayload({ config })
-    const { event, payload: eventPayload } = body
-    
-    // Zoom sends participant joined
-    if (event === 'meeting.participant_joined') {
-      const { object } = eventPayload
-      const { id: meetingId, participant } = object
-      
-      // We try to find the user in our system by zoom userId (if logged in with zoom) or email
-      let userId = null
-      
-      const users = await payload.find({
-        collection: 'users',
-        where: {
-          or: [
-            { zoomId: { equals: participant.user_id } },
-            { email: { equals: participant.email } }
-          ]
-        }
-      })
-      
-      if (users.docs.length > 0) {
-        userId = users.docs[0].id
-      }
-      
-      await payload.create({
-        collection: 'meeting-logs',
-        data: {
-          user: userId,
-          zoomUserId: participant.user_id,
-          meetingId: meetingId.toString(),
-          joinTime: new Date(participant.join_time).toISOString(),
-          webhookStatus: 'joined'
-        }
-      })
-    }
-    
-    // Zoom sends participant left
-    if (event === 'meeting.participant_left') {
-      const { object } = eventPayload
-      const { id: meetingId, participant } = object
-      
-      // Find the open log for this user & meeting
-      const openLogs = await payload.find({
-        collection: 'meeting-logs',
-        where: {
-          and: [
-            { meetingId: { equals: meetingId.toString() } },
-            { zoomUserId: { equals: participant.user_id } },
-            { webhookStatus: { equals: 'joined' } }
-          ]
-        },
-        sort: '-createdAt', // Get the latest one
-        limit: 1
-      })
-      
-      if (openLogs.docs.length > 0) {
-        const log = openLogs.docs[0]
-        const joinTime = new Date(log.joinTime as string).getTime()
-        const leaveTime = new Date(participant.leave_time).getTime()
-        const durationMinutes = Math.round((leaveTime - joinTime) / 60000)
-        
-        await payload.update({
-          collection: 'meeting-logs',
-          id: log.id,
-          data: {
-            leaveTime: new Date(participant.leave_time).toISOString(),
-            durationMinutes: durationMinutes,
-            webhookStatus: 'left'
-          }
-        })
-      }
-    }
-
+    await payload.create({ collection: 'zoom-events', data: { eventKey, event: body.event, body }, req })
+    await processZoomEvent(payload, body, req)
+    await payload.db.commitTransaction(transactionID)
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error in Zoom webhook:', error)
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+    await payload.db.rollbackTransaction(transactionID)
+    // A competing delivery may have committed the same receipt while we were processing.
+    const delivered = await payload.find({ collection: 'zoom-events', where: { eventKey: { equals: eventKey } }, limit: 1 })
+    if (delivered.docs.length) return NextResponse.json({ success: true, duplicate: true })
+    payload.logger.error({ err: error, eventKey }, 'Zoom webhook failed; delivery may be retried')
+    return NextResponse.json({ error: 'Processing failed' }, { status: 500 })
   }
 }
