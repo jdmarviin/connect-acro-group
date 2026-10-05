@@ -56,3 +56,14 @@ test('participant events require an occurrence, connection identity and valid ti
   assert.equal(validateZoomEvent({ event: 'meeting.participant_joined', payload: { object: { id: 123, uuid: 'abc', participant: { user_id: '1', join_time: '2026-09-15T10:00:00Z' } } } }), true)
   assert.equal(validateZoomEvent({ event: 'meeting.participant_joined', payload: { object: { id: 123, uuid: 'abc', participant: { user_name: 'Someone', join_time: '2026-09-15T10:00:00Z' } } } }), false)
 })
+
+test('owner is exempt from trial and is excluded from lead reports even after a role change', () => {
+  assert.equal(hasMeetingAccess({ role: 'owner' }), true)
+  assert.equal(isLeadLog({ user: { role: 'owner' }, source: 'zoom' }), false)
+  assert.equal(isLeadLog({ user: { role: 'user' }, participantRole: 'owner', source: 'zoom' }), false)
+})
+test('permanent room reports aggregate all its occurrences without conflating other rooms', () => {
+  const room = { zoomMeetingId: '123', kind: 'personal', date: null, meetingUUID: 'latest' }
+  assert.equal(belongsToMeeting({ meetingId: '123', meetingUUID: 'older', createdAt: '' }, room), true)
+  assert.equal(belongsToMeeting({ meetingId: '456', meetingUUID: 'older', createdAt: '' }, room), false)
+})

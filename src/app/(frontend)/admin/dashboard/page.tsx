@@ -1,10 +1,13 @@
+import PersonalRoomSync from '@/components/PersonalRoomSync'
+import { formatDuration } from '@/lib/format'
+import { isManager } from '@/lib/access'
 import RefreshStatus from '@/components/RefreshStatus'
 import { isLeadLog, belongsToMeeting } from '@/lib/reporting';
 import Link from "next/link";
 import { Users, Video, Activity, MessageCircle, Mail, Flame, ThermometerSun, Snowflake, ChevronRight, Calendar, Play } from "lucide-react";
-import { getPayload } from 'payload'
-import configPromise from '@/payload.config'
+import { getData } from '@/lib/data'
 import { currentUser } from '@/lib/auth'
+import { trialEndsAt } from '@/lib/access'
 import { redirect } from "next/navigation";
 import AdminChart from "./AdminChart"; // Client component wrapper for Recharts
 
@@ -14,53 +17,47 @@ const getStatusColor = (status: string) => {
   return "#3b82f6"; // blue-500
 };
 
-export default async function AdminDashboard() {
-  const payload = await getPayload({ config: configPromise })
-  
+export default async function AdminDashboard({ searchParams }: { searchParams: Promise<{ zoom?: string }> }) {
+  const { zoom } = await searchParams;
   const adminUser = await currentUser();
 
-  if (!adminUser || adminUser.role !== 'admin') {
+  if (!adminUser || !isManager(adminUser)) {
     redirect('/dashboard') // Redirect non-admins
   }
+  const db = await getData()
 
-  // Fetch all leads (role === 'user')
-  const leadsReq = await payload.find({
+  // Independent reads run concurrently; each keeps its own RLS transaction.
+  const [leadsReq, meetingsReq, logsReq] = await Promise.all([db.find({
     collection: 'users',
     where: {
       role: { equals: 'user' }
     },
     pagination: false,
-  });
-
-  // Fetch all meetings
-  const meetingsReq = await payload.find({
+  }), db.find({
     collection: 'meetings',
     sort: '-date',
     pagination: false,
-  });
-
-  // Fetch all meeting logs
-  const logsReq = await payload.find({
+  }), db.find({
     collection: 'meeting-logs',
     pagination: false,
     depth: 1,
-  });
+  })]);
 
   const now = new Date();
+  const leadLogs = logsReq.docs.filter(isLeadLog);
+  const durationByUser = new Map<string, number>();
+  for (const log of leadLogs) {
+    const id = typeof log.user === 'object' && log.user ? log.user.id : log.user;
+    if (id != null) durationByUser.set(String(id), (durationByUser.get(String(id)) || 0) + (log.durationMinutes || 0));
+  }
 
   const rankedLeads = leadsReq.docs.map(lead => {
     // Determine days remaining
-    const createdAt = new Date(lead.createdAt);
-    const trialEnd = new Date(createdAt.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const trialEnd = new Date(trialEndsAt(lead));
     const daysRemaining = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
 
     // Calculate real engagement from logs
-    const userLogs = logsReq.docs.filter(isLeadLog).filter(log => {
-      const logUserId = typeof log.user === 'object' && log.user ? log.user.id : log.user;
-      return logUserId === lead.id;
-    });
-
-    const totalDuration = userLogs.reduce((acc, log) => acc + (log.durationMinutes || 0), 0);
+    const totalDuration = durationByUser.get(String(lead.id)) || 0;
     // Let's say 10 hours (600 mins) is 100% engagement
     const engagement = Math.min(100, Math.round((totalDuration / 600) * 100));
     
@@ -81,10 +78,10 @@ export default async function AdminDashboard() {
   }).sort((a, b) => b.totalDuration - a.totalDuration);
 
   const processedMeetings = meetingsReq.docs.map(meeting => {
-    const meetingDate = new Date(meeting.date);
+    const meetingDate = meeting.date ? new Date(meeting.date) : null;
 
     // Find logs for this meeting's zoom ID on this specific day
-    const meetingLogs = logsReq.docs.filter(isLeadLog).filter(log => {
+    const meetingLogs = leadLogs.filter(log => {
       return belongsToMeeting(log, meeting);
     });
 
@@ -97,6 +94,7 @@ export default async function AdminDashboard() {
       id: meeting.id,
       title: meeting.title,
       status: meeting.status,
+      kind: meeting.kind,
       date: meetingDate,
       uniqueUsers,
       zoomMeetingId: meeting.zoomMeetingId,
@@ -104,6 +102,8 @@ export default async function AdminDashboard() {
       durationMinutes: meeting.durationMinutes || 60
     };
   });
+
+  processedMeetings.sort((a, b) => Number(b.kind === 'personal') - Number(a.kind === 'personal'));
 
   return (
     <div className="max-w-6xl mx-auto px-6 pt-12 pb-32">
@@ -113,6 +113,8 @@ export default async function AdminDashboard() {
         <p className="text-acro-silver-dark mt-1">Visão geral do engajamento dos leads no período gratuito.</p>
       </header>
 
+      <div className="mb-8 flex flex-wrap gap-6"><Link className="bg-acro-blue text-white px-5 py-3 rounded-xl" href="/admin/meetings/new">Criar reunião</Link><Link className="underline" href="/api/auth/zoom">Conectar Zoom</Link><Link className="underline" href="/admin/usuarios">Gerenciar usuários</Link><PersonalRoomSync /></div>
+      {zoom === 'personal-room-error' && <p role="alert" className="text-amber-300 mb-6">O login foi concluído, mas a sala pessoal não pôde ser sincronizada. Confira as permissões do aplicativo Zoom e use o botão de sincronização.</p>}
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
         <div className="glass-panel p-6 rounded-2xl flex items-center gap-4">
@@ -157,7 +159,7 @@ export default async function AdminDashboard() {
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-acro-blue-light" />
-                Reuniões Agendadas
+                Reuniões e histórico de chamadas
               </h2>
             </div>
 
@@ -184,10 +186,10 @@ export default async function AdminDashboard() {
                         <div className="text-xs text-acro-silver-dark">{meeting.status === "live" ? "Ao vivo" : meeting.status === "ended" ? "Encerrada" : "Agendada"}</div>
                       </td>
                       <td className="py-4 text-center text-sm text-acro-silver">
-                        {meeting.date.toLocaleDateString('pt-BR')} às {meeting.date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        {meeting.date ? meeting.date.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'Recorrente · sem data fixa'}
                       </td>
                       <td className="py-4 text-center text-sm text-acro-silver">
-                        {meeting.durationMinutes} min
+                        {formatDuration(meeting.durationMinutes)}
                       </td>
                       <td className="py-4 text-center">
                         <div className="inline-flex items-center justify-center gap-2 px-3 py-1 rounded-full bg-acro-blue/10 text-acro-blue-light font-bold">
@@ -197,16 +199,7 @@ export default async function AdminDashboard() {
                       </td>
                       <td className="py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          {(() => {
-                            const pwdMatch = meeting.zoomLink?.match(/pwd=([^&]+)/);
-                            const pwd = pwdMatch ? pwdMatch[1] : '';
-                            const href = `/reuniao/${meeting.zoomMeetingId || meeting.id}${pwd ? `?pwd=${pwd}` : ''}`;
-                            return (
-                              <Link href={meeting.zoomLink || href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center p-2 rounded-lg bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white transition-colors" title="Abrir no Zoom com a conta do anfitrião">
-                                <Play className="w-4 h-4" />
-                              </Link>
-                            );
-                          })()}
+                          {meeting.status !== 'ended' && meeting.kind !== 'occurrence' && <Link href={`/reuniao/${meeting.zoomMeetingId}`} className="inline-flex items-center p-2 text-green-500" title="Iniciar reunião no sistema"><Play className="w-4 h-4" /></Link>}
                           <Link href={`/admin/meetings/${meeting.id}`} className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-acro-blue/10 text-sm font-medium text-acro-blue-light hover:bg-acro-blue hover:text-white transition-colors">
                             Relatório <ChevronRight className="w-4 h-4" />
                           </Link>
@@ -264,7 +257,7 @@ export default async function AdminDashboard() {
                         </div>
                       </td>
                       <td className="py-4 text-center">
-                        <div className="font-medium text-white">{lead.totalDuration.toFixed(2)} min</div>
+                        <div className="font-medium text-white">{formatDuration(lead.totalDuration)}</div>
                         <div className="w-24 h-1.5 bg-white/10 rounded-full mx-auto mt-1.5 overflow-hidden">
                           <div 
                             className="h-full rounded-full" 

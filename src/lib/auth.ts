@@ -1,17 +1,22 @@
-import { headers } from 'next/headers'
-import { getPayload } from 'payload'
-import config from '@/payload.config'
+import 'server-only'
+import { cache } from 'react'
 import { redirect } from 'next/navigation'
+import { isManager } from './access'
+import { authenticatedUser } from './supabase/server'
+import { readUser } from './supabase/read'
+import type { AppUser } from './data/types'
 
-export async function currentUser(requestHeaders?: Headers) {
-  const authHeaders = requestHeaders || await headers()
-  const payload = await getPayload({ config })
-  const { user } = await payload.auth({ headers: authHeaders })
-  return user
-}
-export async function requireAdmin() {
+// Request-scoped memoization: never share authentication across users.
+export const currentUser = cache(async (): Promise<AppUser | null> => {
+  const user = await authenticatedUser()
+  if (!user) return null
+  const profile = await readUser(user.id)
+  return profile && !profile.isBlocked ? profile : null
+})
+
+export const requireAdmin = cache(async () => {
   const user = await currentUser()
   if (!user) redirect('/auth')
-  if (user.role !== 'admin') redirect('/dashboard')
+  if (!isManager(user)) redirect('/dashboard')
   return user
-}
+})

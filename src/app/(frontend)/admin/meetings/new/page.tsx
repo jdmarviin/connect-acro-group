@@ -1,113 +1,40 @@
-"use client";
-
-import Link from "next/link";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, Calendar, Link as LinkIcon } from "lucide-react";
-import { createMeetingAction } from "./actions";
+'use client'
+import Link from 'next/link'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { createMeetingAction } from './actions'
 
 export default function ScheduleMeeting() {
-  const router = useRouter();
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = async (formData: FormData) => {
-    setLoading(true);
-    setError('');
-    const scheduled = new Date(`${formData.get('date')}T${formData.get('time')}:00`);
-    if (!Number.isFinite(scheduled.getTime())) { setError('Data inválida.'); setLoading(false); return; }
-    formData.set('scheduledAt', scheduled.toISOString());
+  const router = useRouter()
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [kind, setKind] = useState('scheduled')
+  async function submit(form: FormData) {
+    setLoading(true); setError('')
     try {
-      await createMeetingAction(formData);
-      router.push("/admin/dashboard");
-      router.refresh();
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Erro ao criar reunião");
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="max-w-3xl mx-auto px-6 pt-12 pb-32">
-      <Link href="/admin/dashboard" className="inline-flex items-center gap-2 text-sm text-acro-silver-dark hover:text-white transition-colors mb-6">
-        <ArrowLeft className="w-4 h-4" /> Voltar ao Painel
-      </Link>
-
-      <header className="mb-10">
-        <h1 className="text-3xl font-bold text-white tracking-tight">Agendar Reunião</h1>
-        <p className="text-acro-silver-dark mt-1">Crie uma nova sala para transmissão ao vivo via Zoom.</p>
-      </header>
-
-      <form action={handleSubmit} className="glass-panel p-8 rounded-3xl space-y-8">
-        
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-acro-silver">Título da Reunião</label>
-            <input 
-              type="text" 
-              name="title"
-              required
-              placeholder="Ex: Operacional Abertura - Índice" 
-              className="w-full bg-acro-dark/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/20 focus:outline-none focus:border-acro-blue/50 focus:ring-1 focus:ring-acro-blue/50 transition-all"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-acro-silver">Data</label>
-              <div className="relative">
-                <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
-                <input 
-                  type="date" 
-                  name="date"
-                  required
-                  className="w-full bg-acro-dark/50 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-white focus:outline-none focus:border-acro-blue/50 focus:ring-1 focus:ring-acro-blue/50 transition-all [color-scheme:dark]"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-acro-silver">Horário</label>
-              <div className="relative">
-                <input 
-                  type="time" 
-                  name="time"
-                  required
-                  className="w-full bg-acro-dark/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-acro-blue/50 focus:ring-1 focus:ring-acro-blue/50 transition-all [color-scheme:dark]"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-acro-silver">Link do Zoom</label>
-            <div className="relative">
-              <LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
-              <input 
-                type="url" 
-                name="zoomLink"
-                required
-                placeholder="https://zoom.us/j/123456789"
-                className="w-full bg-acro-dark/50 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-white placeholder-white/20 focus:outline-none focus:border-acro-blue/50 focus:ring-1 focus:ring-acro-blue/50 transition-all"
-              />
-            </div>
-            <p className="text-xs text-acro-silver-dark mt-1">Crie a reunião na conta do trader no Zoom e cole o link completo, incluindo a senha. Horário no fuso do seu navegador.</p>
-          </div>
-        </div>
-
-        <p className="text-sm text-acro-silver-dark">Notificações pelo sistema, WhatsApp e e-mail serão disponibilizadas em uma etapa separada.</p>
-        {error && <p role="alert" className="text-red-400">{error}</p>}
-
-        <div className="pt-8 flex justify-end">
-          <button 
-            type="submit" 
-            disabled={loading}
-            className="px-8 py-3.5 bg-acro-blue hover:bg-acro-blue-light text-white font-bold rounded-xl transition-all shadow-[0_0_20px_-5px_rgba(27,84,214,0.5)] disabled:opacity-50"
-          >
-            {loading ? 'Agendando...' : 'Salvar e Agendar'}
-          </button>
-        </div>
-
-      </form>
-    </div>
-  );
+      if (kind === 'scheduled') {
+        const date = new Date(`${form.get('date')}T${form.get('time')}:00`)
+        if (!Number.isFinite(date.getTime())) throw new Error('Informe data e hora válidas.')
+        form.set('scheduledAt', date.toISOString())
+      }
+      const result = await createMeetingAction(form)
+      if (result.error) throw new Error(result.error)
+      router.push('/admin/dashboard'); router.refresh()
+    } catch (error) { setError(error instanceof Error ? error.message : 'Erro ao criar reunião.') }
+    finally { setLoading(false) }
+  }
+  const input = 'block w-full mt-2 bg-acro-dark border border-white/20 rounded-xl p-3 text-white [color-scheme:dark]'
+  return <div className="max-w-3xl mx-auto px-6 py-12 space-y-8">
+    <Link href="/admin/dashboard">← Voltar ao painel</Link>
+    <header><h1 className="text-3xl text-white font-bold">Criar reunião no Zoom</h1><p className="mt-2">A reunião será criada na sua conta Zoom e ficará visível no painel de todos os participantes.</p></header>
+    <form action={submit} className="glass-panel p-8 rounded-3xl space-y-6">
+      <label className="block">Título<input className={input} name="title" required maxLength={200} placeholder="Operacional de abertura" /></label>
+      <label className="block">Tipo<select className={input} name="kind" value={kind} onChange={event => setKind(event.target.value)}><option value="scheduled">Agendada</option><option value="recurring">Recorrente sem data fixa</option></select></label>
+      {kind === 'scheduled' && <div className="grid grid-cols-2 gap-4"><label>Data<input className={input} name="date" type="date" required /></label><label>Hora<input className={input} name="time" type="time" required /></label><p className="col-span-2 text-sm">Horário no fuso do seu navegador.</p></div>}
+      <label className="block">Duração prevista (minutos)<input className={input} type="number" name="durationMinutes" defaultValue={60} min={1} max={1440} required /></label>
+      <p className="text-sm">Os participantes aguardam até um administrador iniciar. A sala pessoal do owner aparece automaticamente após conectar sua conta Zoom.</p>
+      {error && <p role="alert" className="text-red-400">{error} <Link className="underline" href="/api/auth/zoom">Reconectar Zoom</Link></p>}
+      <button disabled={loading} className="bg-acro-blue text-white rounded-xl px-6 py-3 disabled:opacity-50">{loading ? 'Criando…' : 'Criar reunião'}</button>
+    </form>
+  </div>
 }

@@ -3,17 +3,13 @@ import { ArrowRight, Video, Target, TrendingUp } from "lucide-react";
 import { getDictionary, Locale } from "@/i18n/dictionaries";
 import { cookies } from "next/headers";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
-import { currentUser } from '@/lib/auth';
-import Image from "next/image";
+import LandingAccount from '@/components/LandingAccount';
 
 export default async function Home() {
   const cookieStore = await cookies();
   const localeCookie = cookieStore.get("NEXT_LOCALE")?.value as Locale;
   const locale = localeCookie === "ht" ? "ht" : "pt";
   const t = getDictionary(locale).landing;
-
-  // Verify User Session
-  const user = await currentUser();
 
   return (
     <div className="flex flex-col items-center min-h-screen pt-20 pb-12 px-6">
@@ -23,37 +19,20 @@ export default async function Home() {
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-acro-blue-light to-acro-blue flex items-center justify-center font-bold">
             A
           </div>
-          <span className="opacity-90 hidden sm:inline">CONNECT <span className="text-sm font-normal text-acro-silver-dark">by ACRO GROUP</span></span>
+          <span className="opacity-90 hidden sm:inline">ACROGROUP <span className="text-sm font-normal text-acro-silver-dark">Trading Room</span></span>
         </div>
         
         <div className="flex items-center gap-6">
           <LanguageSwitcher currentLocale={locale} />
           
-          {user ? (
-            <div className="flex items-center gap-4">
-              <Link href={user.role === 'admin' ? '/admin/dashboard' : '/dashboard'} className="text-sm font-medium hover:text-white transition-colors text-acro-blue-light">
-                {t.dashboardBtn}
-              </Link>
-              {user.avatar_url ? (
-                <Image src={user.avatar_url as string} alt="Avatar" width={32} height={32} className="w-8 h-8 rounded-full border border-acro-blue/30" />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-acro-blue/20 flex items-center justify-center text-acro-blue-light font-bold text-sm">
-                  {(user.name as string).charAt(0).toUpperCase()}
-                </div>
-              )}
-            </div>
-          ) : (
-            <Link href="/api/auth/zoom" className="text-sm font-medium hover:text-white transition-colors text-acro-silver">
-              {t.loginZoom}
-            </Link>
-          )}
+          <LandingAccount loginLabel={t.loginZoom} dashboardLabel={t.dashboardBtn} />
         </div>
       </header>
 
       {/* Hero Section */}
       <main className="flex flex-col items-center text-center max-w-4xl w-full z-10">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-acro-blue/30 bg-acro-blue/10 text-acro-blue-light text-xs font-semibold uppercase tracking-wider mb-8">
-          <span className="w-2 h-2 rounded-full bg-acro-blue-light animate-pulse"></span>
+          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
           {t.badge}
         </div>
         
@@ -69,10 +48,11 @@ export default async function Home() {
         </p>
 
         <Link 
-          href={user ? (user.role === 'admin' ? '/admin/dashboard' : '/dashboard') : "/api/auth/zoom"}
+          href="/dashboard"
+          prefetch={false}
           className="group relative inline-flex items-center justify-center gap-3 px-8 py-4 bg-acro-blue text-white rounded-xl font-semibold text-lg overflow-hidden transition-all hover:scale-[1.02] active:scale-95 shadow-[0_0_40px_-10px_rgba(27,84,214,0.5)] hover:shadow-[0_0_60px_-15px_rgba(27,84,214,0.7)]"
         >
-          <span className="relative z-10">{user ? t.dashboardBtn : t.trialBtn}</span>
+          <span className="relative z-10">{t.trialBtn}</span>
           <ArrowRight className="relative z-10 w-5 h-5 group-hover:translate-x-1 transition-transform" />
           <div className="absolute inset-0 bg-gradient-to-r from-acro-blue-light to-acro-blue opacity-0 group-hover:opacity-100 transition-opacity" />
         </Link>

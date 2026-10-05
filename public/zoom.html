@@ -1,63 +1,229 @@
-<!DOCTYPE html>
-<html>
-<head>
+<!doctype html>
+<html lang="pt-BR">
+  <head>
     <title>Zoom Meeting</title>
     <meta charset="utf-8" />
     <link type="text/css" rel="stylesheet" href="/zoom-meetingsdk.css" />
-    <meta name="format-detection" content="telephone=no">
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <meta name="format-detection" content="telephone=no" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+    />
     <style>
-        body { padding: 0; margin: 0; background: black; }
-        #zmmtg-root { width: 100%; height: 100%; position: absolute; }
+      body {
+        padding: 0;
+        margin: 0;
+        background: black;
+      }
+      #talk-controls {
+        position: fixed;
+        left: 16px;
+        bottom: calc(84px + env(safe-area-inset-bottom));
+        z-index: 2147483647;
+        width: min(320px, calc(100vw - 32px));
+        padding: 12px;
+        border: 1px solid #334155;
+        border-radius: 16px;
+        background: #0f172a;
+        color: white;
+        font: 14px/1.4 sans-serif;
+        box-shadow: 0 8px 30px #0008;
+      }
+      #hold-to-talk {
+        width: 100%;
+        min-height: 52px;
+        padding: 12px;
+        border: 0;
+        border-radius: 10px;
+        background: #1b54d6;
+        color: white;
+        font: bold 16px sans-serif;
+        cursor: pointer;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+      }
+      #hold-to-talk[aria-pressed="true"] {
+        background: #15803d;
+      }
+      #hold-to-talk:disabled {
+        opacity: 0.5;
+        cursor: wait;
+      }
+      #hold-to-talk:focus-visible {
+        outline: 3px solid #93c5fd;
+        outline-offset: 3px;
+      }
+      #talk-status {
+        margin: 8px 0 0;
+      }
+      #talk-help {
+        margin: 6px 0 0;
+        color: #cbd5e1;
+        font-size: 12px;
+      }
+      #zmmtg-root {
+        width: 100%;
+        height: 100%;
+        position: absolute;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <div id="zmmtg-root"></div>
     <div id="aria-notify-area"></div>
 
-    <script src="https://source.zoom.us/6.2.0/lib/vendor/react.min.js"></script>
-    <script src="https://source.zoom.us/6.2.0/lib/vendor/react-dom.min.js"></script>
-    <script src="https://source.zoom.us/6.2.0/lib/vendor/redux.min.js"></script>
-    <script src="https://source.zoom.us/6.2.0/lib/vendor/redux-thunk.min.js"></script>
-    <script src="https://source.zoom.us/6.2.0/lib/vendor/lodash.min.js"></script>
-    <script src="https://source.zoom.us/zoom-meeting-6.2.0.min.js"></script>
-    
-    <script>
-        async function startMeeting() {
-            const meetingNumber = new URLSearchParams(window.location.search).get('meetingNumber');
-            const response = await fetch('/api/zoom/signature', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ meetingNumber })
-            });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.error || 'Não foi possível entrar.');
-            if (typeof ZoomMtg === 'undefined') throw new Error('Não foi possível carregar o Zoom. Atualize a página.');
-            ZoomMtg.setZoomJSLib('https://source.zoom.us/6.2.0/lib', '/av');
-            ZoomMtg.preLoadWasm();
-            ZoomMtg.prepareWebSDK();
-            const showError = () => showMessage('Não foi possível conectar ao Zoom. Atualize a página ou volte ao painel.');
-            ZoomMtg.init({
-                leaveUrl: window.location.origin + '/dashboard',
-                success: function () {
-                    ZoomMtg.join({
-                        signature: data.signature, meetingNumber,
-                        passWord: data.password, userName: data.userName,
-                        userEmail: data.userEmail, customerKey: data.customerKey,
-                        success: function () {}, error: showError
-                    });
-                },
-                error: showError
-            });
+    <aside id="talk-controls" aria-label="Microfone">
+      <button
+        id="hold-to-talk"
+        type="button"
+        aria-pressed="false"
+        aria-describedby="talk-help"
+        disabled
+      >
+        Segure para falar
+      </button>
+      <p id="talk-status" role="status" aria-live="polite">
+        Conectando à reunião…
+      </p>
+      <p id="talk-help">
+        Após conectar o áudio, mantenha pressionado com o mouse ou toque. Com o
+        botão em foco, segure Espaço ou Enter.
+      </p>
+    </aside>
+
+    <script type="module">
+      import {
+        installMicrophoneGate,
+        createPushToTalk,
+        bindHoldButton,
+        zoomAudioAdapter,
+      } from "/zoom-push-to-talk.js";
+      let audio;
+      let gate;
+      let unbind;
+      const button = document.getElementById("hold-to-talk");
+      async function loadScript(src) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = src;
+          script.onload = resolve;
+          script.onerror = () =>
+            reject(
+              new Error("Não foi possível carregar o Zoom. Atualize a página."),
+            );
+          document.head.appendChild(script);
+        });
+      }
+      async function startMeeting() {
+        // Install before loading the SDK, including its previews and device tests.
+        gate = installMicrophoneGate(
+          navigator.mediaDevices,
+          window.MediaStreamTrack,
+        );
+        const meetingNumber = new URLSearchParams(window.location.search).get(
+          "meetingNumber",
+        );
+        const response = await fetch("/api/zoom/signature", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ meetingNumber }),
+        });
+        const data = await response.json();
+        if (!response.ok)
+          throw new Error(data.error || "Não foi possível entrar.");
+        for (const file of [
+          "lib/vendor/react.min.js",
+          "lib/vendor/react-dom.min.js",
+          "lib/vendor/redux.min.js",
+          "lib/vendor/redux-thunk.min.js",
+          "lib/vendor/lodash.min.js",
+        ]) {
+          await loadScript("https://source.zoom.us/6.2.0/" + file);
         }
-        function showMessage(message) {
-            const box = document.createElement('div');
-            box.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#111;color:white;padding:48px;font:18px sans-serif';
-            box.textContent = message;
-            const link = document.createElement('a');
-            link.href = '/dashboard'; link.target = '_top'; link.textContent = ' Voltar ao painel'; link.style.color = '#93c5fd';
-            box.appendChild(link); document.body.appendChild(box);
-        }
-        startMeeting().catch(error => showMessage(error.message));
+        await loadScript("https://source.zoom.us/zoom-meeting-6.2.0.min.js");
+        if (typeof ZoomMtg === "undefined")
+          throw new Error(
+            "Não foi possível carregar o Zoom. Atualize a página.",
+          );
+        audio = createPushToTalk({
+          sdk: zoomAudioAdapter(ZoomMtg),
+          gate,
+          onState: ({ ready, held, message }) => {
+            button.disabled = !ready;
+            button.setAttribute("aria-pressed", String(held));
+            button.textContent = held
+              ? "Solte para silenciar"
+              : "Segure para falar";
+            document.getElementById("talk-status").textContent = message;
+          },
+        });
+        unbind = bindHoldButton(button, audio);
+        window.addEventListener(
+          "pagehide",
+          () => {
+            unbind();
+            audio.dispose();
+          },
+          { once: true },
+        );
+        ZoomMtg.setZoomJSLib("https://source.zoom.us/6.2.0/lib", "/av");
+        ZoomMtg.preLoadWasm();
+        ZoomMtg.prepareWebSDK();
+        const showError = (res) => {
+          console.error("Zoom SDK Error:", res);
+          let detail = "";
+          if (res) {
+            if (typeof res === "string") detail = res;
+            else if (res.errorMessage) detail = res.errorMessage;
+            else if (res.result) detail = String(res.result);
+            else detail = JSON.stringify(res);
+          }
+          showMessage("Não foi possível conectar ao Zoom. Detalhe: " + detail);
+        };
+        ZoomMtg.init({
+          leaveUrl: window.location.origin + "/leave.html",
+          disablePreview: true,
+          enableWaitingRoomPreview: false,
+          leaveOnPageUnload: true,
+          success: function () {
+            ZoomMtg.join({
+              sdkKey: data.sdkKey,
+              zak: data.zak,
+              signature: data.signature,
+              meetingNumber,
+              passWord: data.password,
+              userName: data.userName,
+              userEmail: data.userEmail,
+              customerKey: data.customerKey,
+              success: function () {
+                audio.joined();
+              },
+              error: showError,
+            });
+          },
+          error: showError,
+        });
+      }
+      function showMessage(message) {
+        if (unbind) unbind();
+        if (audio) audio.dispose();
+        else if (gate) gate.dispose();
+        document.getElementById("talk-controls").hidden = true;
+        const box = document.createElement("div");
+        box.style.cssText =
+          "position:fixed;inset:0;z-index:99999;background:#111;color:white;padding:48px;font:18px sans-serif";
+        box.textContent = message;
+        const link = document.createElement("a");
+        link.href = "/dashboard";
+        link.target = "_top";
+        link.textContent = " Voltar ao painel";
+        link.style.color = "#93c5fd";
+        box.appendChild(link);
+        document.body.appendChild(box);
+      }
+      startMeeting().catch((error) => showMessage(error.message));
     </script>
-</body>
+  </body>
 </html>

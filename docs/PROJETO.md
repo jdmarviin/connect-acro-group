@@ -15,10 +15,11 @@ O sistema registra presença, não resultados financeiros, atenção visual, int
 | Visitante | Conhecer o produto e iniciar autenticação com Zoom |
 | Lead ativo | Completar cadastro, consultar reuniões, entrar em reunião ao vivo e ver seu histórico |
 | Lead expirado | Entrar na conta e consultar o histórico; não recebe nova autorização de reunião |
-| Administrador/trader | Cadastrar reuniões, iniciar pela própria conta Zoom e consultar indicadores e relatórios de leads |
+| Owner (único) | Administrar o sistema, conectar sua sala pessoal padrão e criar/iniciar reuniões |
+| Administrador/trader | Criar reuniões no Zoom pelo sistema, iniciar salas cadastradas e consultar indicadores e relatórios de leads |
 | Administrador técnico | Consultar registros brutos e participantes não identificados no Payload |
 
-Administradores também têm entradas, saídas e duração armazenadas. Seus registros ficam disponíveis para auditoria técnica, mas não entram nos painéis comerciais, ranking, contagem de participantes ou relatórios de leads. Um acesso direto ao relatório individual de um administrador retorna página não encontrada.
+Owners e administradores também têm entradas, saídas e duração armazenadas. Seus registros ficam disponíveis para auditoria técnica, mas não entram nos painéis comerciais, ranking, contagem de participantes ou relatórios de leads. Um acesso direto ao relatório individual de um administrador retorna página não encontrada.
 
 ## 3. Jornada do lead
 
@@ -29,10 +30,16 @@ Administradores também têm entradas, saídas e duração armazenadas. Seus reg
 5. Se já existe, reutiliza a conta e atualiza o vínculo Zoom, sem reiniciar os 30 dias. Um vínculo Zoom divergente é rejeitado.
 6. Uma sessão autenticada em cookie HttpOnly permite usar a aplicação e a autenticação do Payload.
 7. O lead preenche WhatsApp e o questionário sobre sua experiência, profissão, disponibilidade, objetivos e expectativas.
-8. O painel apresenta reuniões agendadas e as que receberam o evento `meeting.started`.
-9. Ao entrar em uma sala, o servidor verifica novamente sessão, cadastro completo, prazo e reunião cadastrada ao vivo.
+8. O painel apresenta primeiro a sala pessoal do owner, além das reuniões agendadas e recorrentes sem data fixa, compartilhadas com todos os leads ativos.
+9. Ao entrar em uma sala, o servidor verifica sessão, cadastro e prazo. Se o administrador ainda não iniciou, exibe uma espera que consulta o estado a cada cinco segundos. O evento `meeting.started` libera a entrada automaticamente.
 10. O servidor emite uma assinatura de participante do Meeting SDK e um identificador aleatório para associar a presença ao usuário.
 11. Os eventos do Zoom registram entrada e saída. O histórico passa a mostrar os dados confirmados no banco.
+
+### Microfone: segurar para falar
+
+No player do Connect, participantes, admins e owner entram sem transmitir áudio. Depois de conectar o áudio e autorizar o microfone, devem manter o botão **Segure para falar** pressionado com mouse ou toque; com o botão em foco, também podem segurar Espaço ou Enter. Soltar, perder o foco, trocar de aba ou cancelar o toque fecha o microfone. Um clique não mantém o áudio aberto.
+
+A regra vale também para salas pessoais e reuniões já cadastradas quando abertas no player. Reuniões novas são criadas com `mute_upon_entry` no Zoom. Quem entra pelo aplicativo externo do Zoom usa os controles desse aplicativo; o Connect não impõe seu botão nesse caminho.
 
 ## 4. Regra dos 30 dias
 
@@ -41,7 +48,7 @@ Administradores também têm entradas, saídas e duração armazenadas. Seus reg
 - Condição: acesso permitido enquanto `agora < fim`.
 - No instante do vencimento, novas autorizações são bloqueadas.
 - Alterar o perfil, sair, entrar novamente ou refazer o cadastro complementar não renova o prazo.
-- Administradores não têm limite de trial.
+- Owners e administradores não têm limite de trial.
 - O histórico continua acessível ao lead depois do vencimento.
 - Não foi implementada cobrança, renovação paga ou extensão manual de acesso.
 
@@ -49,19 +56,17 @@ O bloqueio protege as autorizações emitidas pelo Connect. Uma assinatura já e
 
 ## 5. Jornada do trader
 
-1. Um operador cria a primeira conta administrativa pelo comando `npm run admin:create`, configurando as variáveis de administração.
-2. Usa o mesmo e-mail da conta Zoom do trader para permitir o vínculo no login OAuth.
-3. Acessa `/admin/dashboard` e abre o formulário de agendamento.
-4. Cria a reunião real na conta do Zoom e copia o link completo, incluindo `pwd` quando existir.
-5. Preenche título, data e hora. O formulário converte o horário local do navegador para UTC.
-6. O sistema valida o domínio e extrai o número da reunião. Não gera números de reunião fictícios.
-7. No horário desejado, abre a reunião no Zoom autenticado como anfitrião.
-8. O webhook `meeting.started` marca a ocorrência como ao vivo. O lead pode então entrar pelo painel.
-9. Ao encerrar, `meeting.ended` marca a ocorrência como encerrada.
-10. Consulta tempo assistido, ranking, relatório por reunião e evolução individual.
-11. Escolhe manualmente se deseja contatar o lead pelos atalhos WhatsApp/e-mail.
+1. Um operador define `OWNER_EMAIL` e executa `npm run owner:create`. O comando promove a conta existente com esse e-mail ou cria uma conta com `OWNER_PASSWORD`. O banco impede um segundo owner; o painel não permite excluir nem rebaixar o proprietário.
+2. O owner entra com Zoom e autoriza perfil, leitura/criação/exclusão de reuniões e leitura do token ZAK. O sistema importa seu PMI como sala permanente sem data fixa, exibida primeiro no painel.
+3. Outros administradores são criados pelo owner no painel técnico `/admin/collections/users` ou pelo comando `npm run admin:create`.
+4. Em `/admin/meetings/new`, o administrador informa título, tipo (agendada ou recorrente sem data fixa) e duração. O horário local é convertido para UTC.
+5. O servidor cria a reunião real pela API Zoom na conta conectada do administrador, com entrada antes do host desabilitada e sala de espera habilitada. A reunião fica visível para todos os leads ativos. Falhas são exibidas; uma falha de persistência tenta desfazer apenas a reunião recém-criada.
+6. Owner ou admin pode iniciar uma sala cadastrada pelo sistema. O servidor obtém o ZAK da conta anfitriã vinculada e emite assinatura SDK com papel 1 apenas para gestores. Participantes recebem papel 0.
+7. `meeting.started` libera a sala para participantes. Ao encerrar uma sala permanente, ela volta ao estado de espera; cada chamada ganha um registro de ocorrência com UUID próprio.
+8. O painel administrativo mostra salas, histórico de chamadas, ranking e relatórios. O relatório da sala permanente agrega as ocorrências; o de uma chamada considera seu UUID.
+9. O lead vê a contagem de dias, horas e minutos restantes, a data de expiração e seu histórico de presenças confirmadas, mesmo após vencer o trial.
 
-O trader inicia a sala no aplicativo/site do Zoom. O player incorporado recebe papel de participante; não promete iniciar como host apenas com uma assinatura. O início como host pelo SDK exigiria também ZAK, conforme a [documentação de autorização do Zoom](https://developers.zoom.us/docs/meeting-sdk/auth/).
+Reuniões legadas sem conta anfitriã vinculada continuam podendo ser iniciadas pelo aplicativo Zoom. O sistema não fornece ZAK para uma conta diferente do anfitrião registrado. A entrada como host usa [assinatura e ZAK conforme o Zoom](https://developers.zoom.us/docs/meeting-sdk/web/client-view/meetings-webinars/).
 
 ## 6. Coleta de presença
 
@@ -120,9 +125,9 @@ O antigo feed social demonstrativo redireciona ao painel. O histórico fictício
 1. Instalar Node.js 22, dependências e disponibilizar PostgreSQL dedicado.
 2. Copiar as variáveis de `.env.example` para `.env` com valores do ambiente.
 3. Aplicar `npm run db:migrate` inicialmente em homologação; não usar sincronização automática de esquema em produção.
-4. Criar a conta administrativa com `npm run admin:create`.
+4. Configurar o owner com `npm run owner:create` e os admins com `npm run admin:create`.
 5. Configurar a URL de callback OAuth exatamente como `<APP_URL>/api/auth/zoom/callback`.
-6. Habilitar a leitura do próprio perfil e as credenciais do Meeting SDK no aplicativo Zoom adequado.
+6. Habilitar leitura de perfil/PMI, leitura/criação/exclusão de reuniões e leitura de ZAK; habilitar o Meeting SDK no mesmo aplicativo Zoom. O sistema usa `ZOOM_CLIENT_ID` como `sdkKey` e `ZOOM_CLIENT_SECRET` como `sdkSecret`, compartilhando o par com OAuth. Reautorizar owner e admins após mudar os escopos.
 7. Configurar a URL HTTPS pública `<APP_URL>/api/webhooks/zoom`, o segredo de assinatura e os quatro eventos usados.
 8. Garantir que o app monitore a conta que realmente hospeda as reuniões. Definir `ZOOM_ACCOUNT_ID` permite restringir a origem da conta.
 9. Confirmar as autorizações/distribuição do SDK para as contas envolvidas; um app de desenvolvimento pode ter restrições impostas pelo Zoom.
@@ -136,7 +141,9 @@ O desenvolvimento local precisa de um endereço HTTPS acessível pelo Zoom para 
 - Repetir login na mesma conta e confirmar que o início do trial não muda.
 - Usar dados sintéticos de uma conta expirada; verificar bloqueio na página e na API de assinatura.
 - Tentar endpoints administrativos sem login e como lead: acesso negado.
-- Cadastrar uma reunião real, iniciar como trader e confirmar o status ao vivo.
+- Criar uma reunião real pelo sistema, iniciar como trader e confirmar o status ao vivo.
+- Sincronizar o PMI do owner, entrar em espera como lead, iniciar/encerrar duas chamadas e confirmar que o histórico separa ambas.
+- Confirmar que tentativa de criar segundo owner falha e que admin não altera nem remove o owner.
 - Entrar como lead pelo SDK por aproximadamente 1 minuto, sair, reentrar e sair novamente.
 - Conferir no banco o UUID, o vínculo do usuário, os intervalos e os minutos.
 - Confirmar que o trader tem presença armazenada e não aparece em nenhum indicador comercial.

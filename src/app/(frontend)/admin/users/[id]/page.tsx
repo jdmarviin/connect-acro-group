@@ -1,11 +1,15 @@
+import { belongsToMeeting } from '@/lib/reporting'
+import { formatDuration } from '@/lib/format'
+import { isManager } from '@/lib/access'
 import { isLeadLog } from '@/lib/reporting';
 import Link from "next/link";
 import { ArrowLeft, Mail, MessageCircle, Clock, Calendar as CalendarIcon, Video } from "lucide-react";
-import { getPayload } from 'payload'
-import configPromise from '@/payload.config'
+import { getData } from '@/lib/data'
 import { currentUser } from '@/lib/auth'
 import { redirect, notFound } from "next/navigation";
 import UserChart from "./UserChart";
+import AdminMemberHistory from '@/components/AdminMemberHistory'
+import { Suspense } from 'react'
 
 interface PageProps {
   params: Promise<{
@@ -15,17 +19,16 @@ interface PageProps {
 
 export default async function AdminUserDetail({ params }: PageProps) {
   const resolvedParams = await params;
-  const payload = await getPayload({ config: configPromise })
-  
   const adminUser = await currentUser();
 
-  if (!adminUser || adminUser.role !== 'admin') {
+  if (!adminUser || !isManager(adminUser)) {
     redirect('/dashboard')
   }
+  const db = await getData()
 
   let leadUser;
   try {
-    leadUser = await payload.findByID({
+    leadUser = await db.findByID({
       collection: 'users',
       id: resolvedParams.id,
     });
@@ -36,7 +39,7 @@ export default async function AdminUserDetail({ params }: PageProps) {
   if (leadUser.role !== 'user') notFound();
 
   // Fetch all meeting logs for this user
-  const logsReq = await payload.find({
+  const [logsReq, meetingsReq] = await Promise.all([db.find({
     collection: 'meeting-logs',
     where: {
       user: { equals: leadUser.id }
@@ -44,18 +47,10 @@ export default async function AdminUserDetail({ params }: PageProps) {
     pagination: false,
     depth: 1,
     sort: '-createdAt'
-  });
-
-  // Fetch scheduled meetings to map zoomMeetingId to titles if possible
-  const meetingsReq = await payload.find({
+  }), db.find({
     collection: 'meetings',
     pagination: false,
-  });
-
-  const meetingsMap = new Map();
-  meetingsReq.docs.forEach(m => {
-    meetingsMap.set(`${m.zoomMeetingId}_${new Date(m.date).toLocaleDateString('pt-BR')}`, m.title);
-  });
+  })]);
 
   // Group logs by day
   const dailyStats = new Map<string, number>();
@@ -70,8 +65,7 @@ export default async function AdminUserDetail({ params }: PageProps) {
     dailyStats.set(dateStr, currentDayDuration + duration);
 
     // Try to find the scheduled meeting title based on zoomMeetingId and date
-    const titleKey = `${log.meetingId}_${dateStr}`;
-    const meetingTitle = meetingsMap.get(titleKey) || `Reunião (${log.meetingId})`;
+    const meetingTitle = meetingsReq.docs.find(meeting => belongsToMeeting(log, meeting))?.title || `Reunião (${log.meetingId})`;
 
     return {
       id: log.id,
@@ -119,7 +113,7 @@ export default async function AdminUserDetail({ params }: PageProps) {
           <Clock className="w-5 h-5 text-acro-silver" />
           <div>
             <div className="text-xs font-semibold text-acro-silver-dark uppercase tracking-wider">Tempo Total</div>
-            <div className="text-lg font-bold text-white">{totalWatched.toFixed(2)} minutos</div>
+            <div className="text-lg font-bold text-white">{formatDuration(totalWatched)}</div>
           </div>
         </div>
       </header>
@@ -179,7 +173,7 @@ export default async function AdminUserDetail({ params }: PageProps) {
                           )}
                         </td>
                         <td className="py-4 text-right">
-                          <div className="font-medium text-white">{log.durationMinutes.toFixed(2)} min</div>
+                          <div className="font-medium text-white">{formatDuration(log.durationMinutes)}</div>
                         </td>
                       </tr>
                     ))}
@@ -191,6 +185,7 @@ export default async function AdminUserDetail({ params }: PageProps) {
         </div>
 
       </div>
+      <Suspense fallback={<p role="status">Carregando jornada e respostas…</p>}><AdminMemberHistory id={leadUser.id} /></Suspense>
     </div>
   );
 }

@@ -1,8 +1,9 @@
+import { isManager } from '@/lib/access'
+import { formatDuration } from '@/lib/format'
 import { isLeadLog, belongsToMeeting } from '@/lib/reporting';
 import Link from "next/link";
-import { ArrowLeft, Users, Calendar, Clock, Video } from "lucide-react";
-import { getPayload } from 'payload'
-import configPromise from '@/payload.config'
+import { ArrowLeft, Users, Calendar, Clock, Play, Video } from "lucide-react";
+import { getData } from '@/lib/data'
 import { currentUser } from '@/lib/auth'
 import { redirect, notFound } from "next/navigation";
 
@@ -14,17 +15,16 @@ interface PageProps {
 
 export default async function AdminMeetingDetail({ params }: PageProps) {
   const resolvedParams = await params;
-  const payload = await getPayload({ config: configPromise })
-  
   const adminUser = await currentUser();
 
-  if (!adminUser || adminUser.role !== 'admin') {
+  if (!adminUser || !isManager(adminUser)) {
     redirect('/dashboard')
   }
+  const db = await getData()
 
   let meeting;
   try {
-    meeting = await payload.findByID({
+    meeting = await db.findByID({
       collection: 'meetings',
       id: resolvedParams.id,
     });
@@ -33,9 +33,9 @@ export default async function AdminMeetingDetail({ params }: PageProps) {
   }
 
   // Find logs for this meeting's zoom ID on this specific day
-  const meetingDate = new Date(meeting.date);
+  const meetingDate = meeting.date ? new Date(meeting.date) : null;
 
-  const logsReq = await payload.find({
+  const logsReq = await db.find({
     collection: 'meeting-logs',
     pagination: false,
     depth: 1,
@@ -78,23 +78,14 @@ export default async function AdminMeetingDetail({ params }: PageProps) {
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight">{meeting.title}</h1>
           <div className="flex flex-wrap items-center gap-4 mt-3 text-sm font-medium text-acro-silver-dark">
-            <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4 text-acro-blue-light" /> {meetingDate.toLocaleDateString('pt-BR')}</span>
-            <span className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-acro-blue-light" /> {meetingDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+            <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4 text-acro-blue-light" /> {meetingDate?.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) || 'Recorrente · sem data fixa'}</span>
+            <span className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-acro-blue-light" /> {meetingDate?.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}</span>
             <span className="flex items-center gap-1.5"><Video className="w-4 h-4 text-acro-blue-light" /> Zoom ID: {meeting.zoomMeetingId || 'N/A'}</span>
           </div>
         </div>
         
         <div className="flex items-center gap-4">
-          {(() => {
-            const pwdMatch = meeting.zoomLink?.match(/pwd=([^&]+)/);
-            const pwd = pwdMatch ? pwdMatch[1] : '';
-            const href = `/reuniao/${meeting.zoomMeetingId || meeting.id}${pwd ? `?pwd=${pwd}` : ''}`;
-            return (
-              <Link href={meeting.zoomLink || href} target="_blank" rel="noopener noreferrer" className="px-5 py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-bold flex items-center gap-2 transition-colors">
-                <Video className="w-5 h-5" /> Abrir no Zoom
-              </Link>
-            );
-          })()}
+          {meeting.status !== 'ended' && meeting.kind !== 'occurrence' && <Link href={`/reuniao/${meeting.zoomMeetingId}`} className="px-5 py-3 rounded-xl bg-green-500 text-white font-bold flex items-center gap-2"><Play className="w-5 h-5" />Iniciar no sistema</Link>}
           <div className="glass-panel px-5 py-3 rounded-xl flex items-center gap-3">
             <Users className="w-5 h-5 text-acro-silver" />
             <div>
@@ -136,7 +127,7 @@ export default async function AdminMeetingDetail({ params }: PageProps) {
                       </div>
                     </td>
                     <td className="py-4 text-center font-medium text-white">
-                      {p.totalDuration.toFixed(2)} min
+                      {formatDuration(p.totalDuration)}
                     </td>
                     <td className="py-4 text-right">
                       <Link href={`/admin/users/${p.user.id}`} className="inline-block px-3 py-1.5 rounded-lg bg-acro-blue/10 text-acro-blue-light text-sm hover:bg-acro-blue hover:text-white transition-colors">

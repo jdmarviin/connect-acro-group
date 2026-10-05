@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+/node_modules.icloud-backup/
 /.pnp
 .pnp.*
 .yarn/*
@@ -41,3 +42,9 @@ next-env.d.ts
 
 # Template sem credenciais deve acompanhar o projeto
 !.env.example
+
+# Isolated Next.js development output
+/.next-dev/
+/supabase/.temp/
+/supabase/.branches/
+/backups/

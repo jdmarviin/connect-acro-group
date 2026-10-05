@@ -1,3 +1,4 @@
+import { isManager } from '@/lib/access'
 import { redirect } from 'next/navigation'
 import { currentUser } from '@/lib/auth'
 import OnboardingForm from './OnboardingForm'
@@ -12,7 +13,7 @@ export default async function OnboardingPage() {
 
 
   if (user.onboardingCompleted) {
-    if (user.role === 'admin') {
+    if (isManager(user)) {
       redirect('/admin/dashboard')
     } else {
       redirect('/dashboard')

@@ -62,7 +62,7 @@ As rotas controlam HTTP; as funções em `lib` concentram as regras reutilizadas
 ### `users`
 
 - Identidade: `id`, `email`, `name`, `zoomId`, `avatar_url`.
-- Autorização: `role = admin | user`.
+- Autorização: `role = owner | admin | user`. Há no máximo um owner, garantido por índice único parcial no PostgreSQL. O bootstrap explícito cria o primeiro; admins não podem editar o owner, e seu rebaixamento/exclusão é bloqueado.
 - Trial: `createdAt` protegido por hook; fim calculado, sem campo editável pelo lead.
 - Perfil: WhatsApp, experiência, profissão, disponibilidade, objetivos, dificuldades e expectativas.
 - `onboardingCompleted` é atualizado pelo endpoint controlado.
@@ -71,14 +71,17 @@ As rotas controlam HTTP; as funções em `lib` concentram as regras reutilizadas
 
 ### `meetings`
 
-- `title`, `date` em UTC, `zoomLink`, `zoomMeetingId`, `durationMinutes` planejada.
+- `title`, `date` opcional em UTC, `zoomLink`, `zoomMeetingId`, `durationMinutes` planejada.
+- `kind = scheduled | recurring | personal | occurrence`: agendamento, sala permanente, PMI do owner e chamada de sala permanente.
+- `roomKey` único identifica o PMI (`owner-personal`), salas recorrentes ou UUID da ocorrência. `parentMeeting` associa chamadas à sala.
+- `host` e `zoomHostId` vinculam a conta autorizada a hospedar; ZAK somente dessa conta.
 - `status = scheduled | live | ended`.
 - `meetingUUID`, `startedAt`, `endedAt`: ocorrência observada no Zoom.
 - `notifyParticipants`: campo reservado para compatibilidade; não entrega notificações.
 - Escrita exclusivamente administrativa; leitura exige trial ativo ou administrador.
 - `zoomLink` não é exposto a leads pela API gerada. A senha é recuperada no servidor para a entrada autorizada.
 
-Cadastre uma linha por sessão agendada. Para números recorrentes, o evento procura primeiro o UUID; se ainda não estiver associado, escolhe o agendamento sem UUID mais próximo do início, em uma janela de 12 horas. Não vincula um evento desconhecido arbitrariamente a qualquer reunião.
+Salas permanentes têm data nula. Cada início/fim gera ou atualiza uma linha `occurrence` por UUID; a sala volta a `scheduled` após encerrar e permanece listada. Eventos antigos não sobrescrevem o estado de uma chamada mais recente. Para reuniões legadas, o evento procura primeiro o UUID; se ainda não estiver associado, escolhe o agendamento sem UUID mais próximo do início, em uma janela de 12 horas. Não vincula um evento desconhecido arbitrariamente a qualquer reunião.
 
 ### `meeting-logs`
 
@@ -115,7 +118,7 @@ Preservar os tickets durante a janela de auditoria/reentrega; eventos podem cheg
 
 Usar `payload.auth` em `lib/auth.ts` para todas as páginas e endpoints protegidos. O callback OAuth assina o cookie com `payload.secret`, que é o segredo processado do Payload. Usar diretamente o valor bruto de `PAYLOAD_SECRET` produziria tokens incompatíveis com os endpoints gerados. Referência: [JWT no Payload](https://payloadcms.com/docs/authentication/jwt).
 
-O fluxo OAuth usa `state` aleatório em cookie HttpOnly, validade de 10 minutos e comparação em tempo constante. A sessão possui validade de 24 horas, SameSite Lax e Secure em produção. O token de acesso ao Zoom é usado para consultar o perfil e não é persistido.
+O fluxo OAuth usa `state` aleatório em cookie HttpOnly, validade de 10 minutos e comparação em tempo constante. A sessão possui validade de 24 horas, SameSite Lax e Secure em produção. Para leads, o token de acesso é usado apenas para consultar o perfil. Para gestores, access/refresh tokens são criptografados com AES-256-GCM usando chave derivada de `payload.secret` e persistidos em `zoom-credentials`, coleção separada, sem acesso pela API gerada. O refresh usa transação e bloqueio de linha antes de ler o token rotativo. Alterar o segredo exige reconectar as contas Zoom.
 
 A coleção usa JWT sem sessões persistentes (`useSessions: false`); logout remove o cookie, mas não revoga uma cópia do token antes de sua expiração. Uma evolução pode adotar sessões persistidas do Payload também no callback OAuth para revogação individual.
 
@@ -128,13 +131,14 @@ Credenciais OAuth, segredo do webhook, segredo do SDK e segredo Payload têm fun
 | `GET /api/auth/zoom` | Nenhuma | Configuração OAuth; redirecionamento com estado |
 | `GET /api/auth/zoom/callback` | `code`, `state` | Estado válido, consulta de perfil; cookie e redirecionamento |
 | `POST /api/users/onboarding` | Campos explícitos do questionário | Usuário autenticado; atualiza somente o próprio perfil |
-| `POST /api/zoom/signature` | `{ meetingNumber }` | Login, trial, onboarding e reunião ao vivo; assinatura com papel 0 |
+| `POST /api/zoom/signature` | `{ meetingNumber }` | Lead: login, trial, onboarding, sala ao vivo e papel 0. Gestor: conta anfitriã vinculada, ZAK e papel 1 |
 | `POST /api/webhooks/zoom` | JSON oficial + cabeçalhos Zoom | HMAC + timestamp; transação idempotente |
 | `POST /api/meeting-logs/sync` | Qualquer corpo | `410`: gravação pelo navegador desativada |
 | API Payload `/api/users`, `/api/meetings`, etc. | Contratos das coleções | Controle de acesso por coleção e campo |
-| Server Action `createMeetingAction` | Título, link e data ISO | Administrador; reunião real, sem notificações |
+| Server Action `createMeetingAction` | Título, tipo, duração e data ISO se agendada | Owner/admin; criação pela API Zoom e persistência local |
+| Server Action `syncPersonalRoomAction` | Nenhuma | Owner/admin; importa o PMI da conta owner conectada |
 
-O campo `role` enviado a `/api/zoom/signature` é ignorado: clientes não podem elevar a autorização a host. O endpoint verifica a reunião cadastrada; não assina números arbitrários.
+O campo `role` enviado a `/api/zoom/signature` é ignorado: apenas o papel autenticado no banco determina autorização de host. O endpoint verifica a reunião cadastrada; não assina números arbitrários.
 
 ## 6. Webhook: sequência e consistência
 
@@ -159,11 +163,11 @@ A deduplicação de recibos é protegida por índice único. Conflitos concorren
 
 ## 7. Relatórios e escala
 
-Aplicar `isLeadLog` antes de toda agregação. O filtro exige usuário relacionado com papel `user`, exclui fotografia `admin` e exclui fonte browser/identificador legado `web-sdk-*`.
+Aplicar `isLeadLog` antes de toda agregação. O filtro exige usuário relacionado com papel `user`, exclui fotografia `admin` ou `owner` e exclui fonte browser/identificador legado `web-sdk-*`.
 
 Consultar com `depth: 1` para que a relação do usuário traga o papel; um ID sem dados do usuário é excluído por segurança. Administradores continuam armazenados; filtrar somente na camada de consulta/indicadores.
 
-Usar UUID para agrupar ocorrências. Logs legados sem UUID usam dia de Brasília, com a limitação documentada no projeto. Consultas atuais usam `pagination: false`, eliminando truncamento silencioso dos limites antigos de 100 leads ou 5.000 logs.
+Usar UUID para agrupar ocorrências. O relatório de uma sala permanente agrega todos os seus UUIDs, enquanto a linha de chamada `occurrence` mantém o filtro exato. Logs legados sem UUID usam dia de Brasília, com a limitação documentada no projeto. Consultas atuais usam `pagination: false`, eliminando truncamento silencioso dos limites antigos de 100 leads ou 5.000 logs.
 
 Para uma base grande, substituir carregamento integral por consultas agregadas SQL com filtro de papéis no banco, paginação dos detalhes, índices compostos `(meeting_uuid, zoom_user_id, join_time)` e `(user_id, join_time)`, além de cache invalidado por eventos. Preservar testes comparando resultados antes da otimização.
 
@@ -183,7 +187,7 @@ Procedimento:
 6. Executar testes, tipagem, lint e build.
 7. Aplicar o mesmo procedimento no ambiente de destino durante a implantação.
 
-O comando de migração não foi executado contra o banco do cliente nesta análise. O downgrade destrutivo da migração inicial foi desabilitado; restauração deve usar backup validado. Tabelas que tenham divergido do protótipo precisam de revisão do esquema antes da execução.
+As novas migrações `20260917_010000_owner_roles` e `20260917_020000_zoom_rooms` foram aplicadas no banco configurado e constam no lote 2. Em outros ambientes, devem ser aplicadas antes de iniciar esta versão. A primeira adiciona os valores de enum e deve ser confirmada antes da segunda, que cria o índice de owner único, campos de salas e tabela de credenciais. Não apagam usuários, reuniões ou presenças. O downgrade destrutivo da migração inicial foi desabilitado; restauração deve usar backup validado. Tabelas que tenham divergido do protótipo precisam de revisão do esquema antes da execução.
 
 Não habilitar `PAYLOAD_DB_PUSH=true` em produção. A sincronização automática pode propor alterações incompatíveis com dados existentes. Usar novas migrações versionadas para futuras mudanças.
 
@@ -246,8 +250,39 @@ Critérios de aceite: nenhum admin/lead expirado recebe aviso; reenvio do iníci
 - Reconciliação manual auditável de participantes sem identidade.
 - Tempo cronológico único para acessos simultâneos em vários dispositivos.
 - Revogação persistente de sessões OAuth.
-- Criação de reuniões pelo servidor e início como host via SDK com ZAK, se desejados.
+- Reconciliação de reuniões criadas no Zoom quando a compensação após falha local também falhar.
 - Produtos, compras e acesso pago após trial.
 - Filtros de período, exportações e métricas comerciais configuráveis.
 
 Essas evoluções devem preservar a regra central: admins são registrados para auditoria e permanecem fora dos indicadores de leads.
+
+## 12. Configuração e validação desta atualização
+
+- `npm run owner:create` usa `OWNER_EMAIL`, `OWNER_NAME` e, somente para conta nova, `OWNER_PASSWORD`. Não promove automaticamente o primeiro admin encontrado.
+- Conectar o Zoom pelo login depois da promoção; isso persiste autorização do gestor e sincroniza o PMI. O botão de sincronização permite repetir a importação sem duplicar a sala.
+- Os escopos do aplicativo precisam autorizar perfil/PMI, consulta/criação/exclusão de reuniões e consulta de ZAK. A exclusão é usada apenas para compensar falha de persistência da reunião recém-criada. Veja [API de reuniões](https://developers.zoom.us/docs/api/meetings/) e [autorização SDK](https://developers.zoom.us/docs/meeting-sdk/auth/).
+- `ZOOM_WEBHOOK_SECRET_TOKEN` e os eventos de início/fim/entrada/saída são necessários para liberar a espera e contabilizar presença. O endpoint deve ser HTTPS público.
+- O Meeting SDK usa diretamente `ZOOM_CLIENT_ID` como `sdkKey` e `ZOOM_CLIENT_SECRET` como `sdkSecret`, o mesmo par do OAuth neste aplicativo. Variáveis antigas `ZOOM_SDK_KEY`/`ZOOM_SDK_SECRET` não são utilizadas.
+- Testes cobrem owner único no PostgreSQL descartável, permissões, renovação/criptografia de tokens, importação do PMI, reabertura de salas, eventos atrasados e relatórios.
+- Cópias preexistentes `src/payload-types 2.ts` e `src/payload.config 2.ts` foram preservadas, mas excluídas do TypeScript para evitar contratos duplicados. A configuração ativa é `src/payload.config.ts` e os tipos são gerados em `src/payload-types.ts`.
+
+### Verificação no ambiente desta entrega
+
+- `npm test`: 26 testes passaram; `npm run typecheck`, `npm run lint` e `npm run build` passaram.
+- As duas migrações novas foram aplicadas no PostgreSQL configurado. A consulta posterior confirmou os mesmos dois admins e dois leads; nenhum owner foi escolhido automaticamente.
+- O servidor local responde `/dashboard` com 307 para visitante e `/api/zoom/signature` com 401 sem sessão.
+- O build usa `.next`; o desenvolvimento usa `.next-dev`, para que compilar não corrompa os módulos de um servidor de desenvolvimento aberto.
+- Pendente de configuração externa: e-mail do owner, autorização Zoom com os escopos necessários e segredo do webhook. A chamada real, o ZAK e a entrega de eventos ainda precisam ser homologados com a conta Zoom.
+
+## 13. Controle de microfone no player
+
+`public/zoom-push-to-talk.js` centraliza o botão de segurar para falar. `public/zoom.html` instala o controle antes de carregar o SDK, incluindo captura para prévias e troca de dispositivos. O componente React antigo agora reutiliza o mesmo iframe.
+
+- A captura de microfone mantém as faixas locais com `MediaStreamTrack.enabled = false` enquanto o botão não está pressionado. A configuração de mute do próprio SDK é preservada. Faixas clonadas e capturas que terminam depois de soltar também permanecem fechadas.
+- Ao pressionar, o controlador solicita unmute do próprio participante. Ao soltar, fecha imediatamente as faixas locais e sincroniza o mute do SDK. Uma resposta atrasada não reabre o microfone.
+- O controlador respeita o intervalo mínimo de um segundo da [API ZoomMtg.mute](https://marketplacefront.zoom.us/sdk/meeting/web/functions/ZoomMtg.mute.html). O bloqueio local usa a [propriedade enabled das faixas de mídia](https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamTrack/enabled), que produz silêncio quando desabilitada.
+- Mouse, toque, Espaço e Enter não funcionam como alternância: é necessário manter pressionado. `pointercancel`, perda de captura, perda de foco, página oculta e saída fecham o áudio.
+- Owner, admin e lead usam a mesma regra. Reuniões novas recebem `settings.mute_upon_entry = true` na API Zoom; reuniões existentes e PMI ficam protegidos pelo controle do player.
+- A captura de tela não é interceptada. Os controles de conectar áudio/dispositivo e as permissões do anfitrião continuam pertencendo ao Zoom. O recurso não controla microfones de pessoas que entram por aplicativos externos.
+
+Os testes simulam faixas e callbacks do SDK para cobrir entrada fechada, controles nativos, clones, autorização tardia, resposta atrasada de unmute, falha do SDK, toque cancelado, perda de foco e teclado. A homologação em chamada real deve confirmar a compatibilidade da captura com cada navegador e com a versão 6.2.0 do SDK.

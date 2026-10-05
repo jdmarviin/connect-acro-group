@@ -1,0 +1,32 @@
+project_id = "connect"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["connect"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[db.seed]
+enabled = false
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/api/auth/zoom/callback"]
+enable_signup = true
+
+[auth.external.zoom]
+enabled = true
+client_id = "env(ZOOM_CLIENT_ID)"
+secret = "env(ZOOM_CLIENT_SECRET)"
+redirect_uri = "http://localhost:54321/auth/v1/callback"

@@ -1,3 +1,4 @@
+import { isManager } from '@/lib/access'
 import { cookies } from 'next/headers'
 import { currentUser } from '@/lib/auth'
 import Image from 'next/image'
@@ -28,7 +29,7 @@ export default async function Header() {
         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-acro-blue-light to-acro-blue flex items-center justify-center font-bold text-sm">
           A
         </div>
-        <span className="opacity-90 hidden sm:inline">CONNECT <span className="text-sm font-normal text-acro-silver-dark">by ACRO GROUP</span></span>
+        <span className="opacity-90 hidden sm:inline">ACROGROUP <span className="text-sm font-normal text-acro-silver-dark">TRAIDING ROOM</span></span>
       </div>
 
       <div className="flex items-center gap-6">
@@ -37,7 +38,7 @@ export default async function Header() {
         <div className="flex items-center gap-4">
           <div className="text-right hidden sm:block">
             <div className="text-sm font-bold text-white">{userName}</div>
-            <div className="text-xs text-acro-silver-dark">{user.role === 'admin' ? t.admin : t.participant}</div>
+            <div className="text-xs text-acro-silver-dark">{user.role === 'owner' ? 'Owner' : isManager(user) ? t.admin : t.participant}</div>
           </div>
           
           {userAvatar ? (

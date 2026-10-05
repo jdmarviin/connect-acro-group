@@ -1,7 +1,9 @@
+import RefreshStatus from '@/components/RefreshStatus'
+import { findJoinableMeeting } from '@/lib/meetings'
+import { isManager } from '@/lib/access'
 import { currentUser } from '@/lib/auth'
 import { hasMeetingAccess } from '@/lib/access'
-import { getPayload } from 'payload'
-import config from '@/payload.config'
+import { getData } from '@/lib/data'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 
@@ -9,17 +11,22 @@ export default async function ReuniaoPage({ params }: { params: Promise<{ meetin
   const user = await currentUser()
   if (!user) redirect('/auth')
   if (!hasMeetingAccess(user)) redirect('/dashboard?expired=1')
-  if (user.role !== 'admin' && !user.onboardingCompleted) redirect('/onboarding')
+  if (!isManager(user) && !user.onboardingCompleted) redirect('/onboarding')
   const { meetingId } = await params
-  const payload = await getPayload({ config })
-  const meetings = await payload.find({ collection: 'meetings', where: { zoomMeetingId: { equals: meetingId } }, sort: '-date', limit: 1 })
-  const meeting = meetings.docs[0]
+  const db = await getData()
+  const meeting = await findJoinableMeeting(db, meetingId)
   if (!meeting) notFound()
-  if (meeting.status !== 'live') return (
+  if (meeting.status === 'ended') return (
     <div className="max-w-xl mx-auto p-10 text-white space-y-6">
       <h1 className="text-2xl font-bold">{meeting.title}</h1>
-      <p>{meeting.status === 'ended' ? 'Esta reunião foi encerrada.' : 'Aguarde o trader iniciar a reunião. Depois, atualize esta página.'}</p>
-      {user.role === 'admin' && <a className="block underline" href={meeting.zoomLink} target="_blank" rel="noopener noreferrer">Abrir no Zoom com a conta do anfitrião</a>}
+      <p>Esta reunião foi encerrada.</p>
+      <Link className="block underline" href="/dashboard">Voltar ao painel</Link>
+    </div>
+  )
+  if (meeting.status !== 'live' && !isManager(user)) return (
+    <div className="max-w-xl mx-auto p-10 text-white space-y-6">
+      <h1 className="text-2xl font-bold">{meeting.title}</h1>
+      <RefreshStatus interval={5000} /><p>Aguardando o administrador iniciar a reunião. Você entrará automaticamente quando a sala estiver ao vivo.</p>
       <Link className="block underline" href="/dashboard">Voltar ao painel</Link>
     </div>
   )
