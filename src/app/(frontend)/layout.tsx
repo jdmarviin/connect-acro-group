@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import FloatingMenu from "@/components/FloatingMenu";
+import { cookies } from "next/headers";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -15,17 +16,20 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Acro Group - Connect",
-  description: "Monitoramento de engajamento ao vivo",
+  title: "Acro Group Connect — Sal trading an dirèk",
+  description: "Swiv sal trading yo an dirèk, prezans ak angajman kominote ou nan yon sèl panèl.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cookieStore = await cookies();
+  const documentLanguage = cookieStore.get("NEXT_LOCALE")?.value === "pt" ? "pt-BR" : "ht";
+
   return (
-    <html lang="pt-BR">
+    <html lang={documentLanguage}>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-acro-dark text-acro-silver flex flex-col`}
       >
