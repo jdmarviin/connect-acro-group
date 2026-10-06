@@ -1,4 +1,4 @@
-import Link from "next/link";
+
 import { CheckCircle2, ArrowRight, Video } from "lucide-react";
 
 const errors: Record<string, string> = {

@@ -39,7 +39,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
         if (answer) {
           if (answer.value_boolean !== null) value = answer.value_boolean ? t.yes : t.no
           else if (answer.value_text !== null) value = optionLabel(answer.value_text)
-          else if (Array.isArray(answer.value_json)) value = answer.value_json.map((item: any) => optionLabel(String(item))).join(', ')
+          else if (Array.isArray(answer.value_json)) value = answer.value_json.map((item: unknown) => optionLabel(String(item))).join(', ')
           else value = String(answer.value_number ?? answer.value_date ?? t.noAnswer)
         }
         return <article key={q.id} className="workspace-card reflection-answer"><h2>{questionLabel(q, locale)}</h2><p>{value}</p></article>
