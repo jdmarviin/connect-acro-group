@@ -53,7 +53,7 @@ export default async function ParticipantDashboard() {
         {meetings.docs.length === 0 && <p>Nenhuma reunião disponível no momento.</p>}
       {meetings.docs.map(meeting => <article key={meeting.id} className="glass-panel p-6 rounded-2xl flex items-center justify-between gap-4">
         <div><h3 className="font-semibold text-white">{meeting.title}</h3><p>{meeting.date ? `${new Date(meeting.date).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })} (Brasília)` : 'Recorrente · sem data fixa'}</p></div>
-        <Link href={`/reuniao/${meeting.zoomMeetingId}`} className="bg-acro-blue text-white px-5 py-3 rounded-xl">{meeting.status === 'live' ? 'Ao vivo · Entrar' : 'Entrar e aguardar'}</Link>
+        <Link href={`/reuniao/${meeting.zoomMeetingId}`} className={`text-white px-5 py-3 rounded-xl transition ${meeting.status === 'live' ? 'bg-red-500 hover:bg-red-600 animate-pulse' : 'bg-acro-blue hover:bg-acro-blue-light'}`}>{meeting.status === 'live' ? 'Ao vivo · Entrar' : 'Entrar e aguardar'}</Link>
       </article>)}
       </section>
     )}

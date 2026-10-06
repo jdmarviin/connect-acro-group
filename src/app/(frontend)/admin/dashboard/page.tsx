@@ -183,7 +183,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                     <tr key={meeting.id} className="group hover:bg-white/[0.02] transition-colors">
                       <td className="py-4">
                         <div className="font-semibold text-white">{meeting.title}</div>
-                        <div className="text-xs text-acro-silver-dark">{meeting.status === "live" ? "Ao vivo" : meeting.status === "ended" ? "Encerrada" : "Agendada"}</div>
+                        <div className={`text-xs ${meeting.status === 'live' ? 'text-red-500 font-bold' : 'text-acro-silver-dark'}`}>{meeting.status === "live" ? "Ao vivo" : meeting.status === "ended" ? "Encerrada" : "Agendada"}</div>
                       </td>
                       <td className="py-4 text-center text-sm text-acro-silver">
                         {meeting.date ? meeting.date.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'Recorrente · sem data fixa'}
