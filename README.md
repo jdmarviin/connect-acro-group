@@ -32,3 +32,4 @@ npm run build
 Os testes usam dados sintéticos. Não iniciam reuniões nem enviam mensagens aos leads. As notificações pelo sistema/navegador, WhatsApp e e-mail ficaram para uma implementação separada, conforme solicitado.
 
 Antes de usar com clientes, aplique a migração em homologação e execute o roteiro de reunião real do documento do projeto. O webhook precisa de uma URL HTTPS pública e das assinaturas configuradas no Zoom.
+
