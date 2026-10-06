@@ -29,15 +29,14 @@ export default async function AuthPage({ searchParams }: { searchParams: Promise
 
         {/* Zoom Login Button */}
         {error && <p role="alert" className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{errors[error] || 'Não foi possível entrar. Tente novamente.'}</p>}
-        <Link
+        <a
           href="/api/auth/zoom"
-          prefetch={false}
           className="w-full group relative inline-flex items-center justify-center gap-3 px-6 py-4 bg-acro-blue text-white rounded-xl font-bold hover:bg-acro-blue-light transition-all shadow-lg shadow-acro-blue/20 active:scale-[0.98]"
         >
           <Video className="w-5 h-5" />
           Autenticar com Zoom
           <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-        </Link>
+        </a>
 
         <p className="mt-8 text-xs text-acro-silver-dark/60">
           Ao continuar, você concorda com nossos Termos de Serviço.

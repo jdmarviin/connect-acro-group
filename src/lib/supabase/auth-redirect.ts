@@ -5,7 +5,8 @@ export function requestHost(request: Request): string {
 }
 
 export function authOrigin(request: Request, configured: string | undefined, development: boolean): string {
-  const canonical = new URL(configured || 'http://localhost:3000').origin
+  const fallback = process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'
+  const canonical = new URL(configured || fallback).origin
   const host = requestHost(request)
   if (host === new URL(canonical).host) return canonical
   if (development) {

@@ -33,7 +33,7 @@ export default function ScheduleMeeting() {
       {kind === 'scheduled' && <div className="grid grid-cols-2 gap-4"><label>Data<input className={input} name="date" type="date" required /></label><label>Hora<input className={input} name="time" type="time" required /></label><p className="col-span-2 text-sm">Horário no fuso do seu navegador.</p></div>}
       <label className="block">Duração prevista (minutos)<input className={input} type="number" name="durationMinutes" defaultValue={60} min={1} max={1440} required /></label>
       <p className="text-sm">Os participantes aguardam até um administrador iniciar. A sala pessoal do owner aparece automaticamente após conectar sua conta Zoom.</p>
-      {error && <p role="alert" className="text-red-400">{error} <Link className="underline" href="/api/auth/zoom">Reconectar Zoom</Link></p>}
+      {error && <p role="alert" className="text-red-400">{error} <a className="underline" href="/api/auth/zoom">Reconectar Zoom</a></p>}
       <button disabled={loading} className="bg-acro-blue text-white rounded-xl px-6 py-3 disabled:opacity-50">{loading ? 'Criando…' : 'Criar reunião'}</button>
     </form>
   </div>

@@ -113,7 +113,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
         <p className="text-acro-silver-dark mt-1">Visão geral do engajamento dos leads no período gratuito.</p>
       </header>
 
-      <div className="mb-8 flex flex-wrap gap-6"><Link className="bg-acro-blue text-white px-5 py-3 rounded-xl" href="/admin/meetings/new">Criar reunião</Link><Link className="underline" href="/api/auth/zoom">Conectar Zoom</Link><Link className="underline" href="/admin/usuarios">Gerenciar usuários</Link><PersonalRoomSync /></div>
+      <div className="mb-8 flex flex-wrap gap-6"><Link className="bg-acro-blue text-white px-5 py-3 rounded-xl" href="/admin/meetings/new">Criar reunião</Link><a className="underline" href="/api/auth/zoom">Conectar Zoom</a><Link className="underline" href="/admin/usuarios">Gerenciar usuários</Link><PersonalRoomSync /></div>
       {zoom === 'personal-room-error' && <p role="alert" className="text-amber-300 mb-6">O login foi concluído, mas a sala pessoal não pôde ser sincronizada. Confira as permissões do aplicativo Zoom e use o botão de sincronização.</p>}
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
