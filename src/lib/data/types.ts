@@ -16,6 +16,7 @@ export interface AppMeeting {
   durationMinutes?: number | null; notifyParticipants?: boolean | null; createdAt: string; updatedAt: string
 }
 export interface AppLog {
+  meetingTitle?: string | null
   id: ID; user?: ID | AppUser | null; meetingId: string; meetingUUID?: string | null
   joinTime?: string | null; leaveTime?: string | null; durationMinutes?: number | null
   participantRole?: string | null; source?: string | null; zoomUserId?: string | null

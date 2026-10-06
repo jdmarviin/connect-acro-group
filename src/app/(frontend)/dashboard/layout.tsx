@@ -1,14 +1,12 @@
-import Header from "@/components/Header";
+import AppShell from "@/components/AppShell";
+import { participantContext } from "@/lib/participant";
+import './workspace.css';
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <>
-      <Header />
-      {children}
-    </>
-  );
+  const { user, locale } = await participantContext();
+  return <AppShell name={user.name} locale={locale}>{children}</AppShell>;
 }

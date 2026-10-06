@@ -9,7 +9,7 @@ export default async function Header() {
   const cookieStore = await cookies()
   
   const localeCookie = cookieStore.get("NEXT_LOCALE")?.value as Locale;
-  const locale = localeCookie === "ht" ? "ht" : "pt";
+  const locale = localeCookie === "pt" ? "pt" : "ht";
   const t = getDictionary(locale).header;
 
   const user = await currentUser();
@@ -29,7 +29,7 @@ export default async function Header() {
         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-acro-blue-light to-acro-blue flex items-center justify-center font-bold text-sm">
           A
         </div>
-        <span className="opacity-90 hidden sm:inline">ACROGROUP <span className="text-sm font-normal text-acro-silver-dark">TRAIDING ROOM</span></span>
+        <span className="opacity-90 hidden sm:inline">ACROGROUP <span className="text-sm font-normal text-acro-silver-dark">TRADING ROOM</span></span>
       </div>
 
       <div className="flex items-center gap-6">

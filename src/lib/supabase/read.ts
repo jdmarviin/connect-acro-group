@@ -33,7 +33,7 @@ const projections: Record<keyof Documents,string> = {
  where r.room_type<>'scheduled' and r.is_active`,
   'meeting-logs':`
  select jsonb_build_object('id',s.id,'user',u.doc,'meetingId',coalesce(r.external_meeting_id,s.legacy_external_meeting_id),
- 'meetingUUID',coalesce(m.external_uuid,s.legacy_external_uuid),'zoomUserId',s.provider_participant_id,
+ 'meetingUUID',coalesce(m.external_uuid,s.legacy_external_uuid),'meetingTitle',coalesce(m.title,r.title),'zoomUserId',s.provider_participant_id,
  'joinTime',s.joined_at,'leaveTime',s.left_at,'durationMinutes',coalesce(s.legacy_duration_minutes,s.duration_seconds/60),'webhookStatus',s.status,
  'participantRole',case when s.participant_role_snapshot='member' then 'user' else s.participant_role_snapshot end,
  'participantName',s.participant_name,'participantEmail',s.participant_email,

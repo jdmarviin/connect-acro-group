@@ -28,7 +28,7 @@ async function setup() {
   const folder = new URL('../supabase/migrations/', import.meta.url)
   for (const file of readdirSync(folder).filter(f => f.endsWith('.sql')).sort()) {
     try { await db.exec(readFileSync(new URL(file, folder), 'utf8')) }
-    catch (error) { throw new Error(`Migration failed: ${file}`, { cause: error }) }
+    catch (error) { throw new Error(`Migration failed: ${file}: ${error instanceof Error ? error.message : String(error)}`, { cause: error }) }
   }
   for (const [id, email] of [[alice,'alice@example.test'],[bob,'bob@example.test'],[owner,'owner@example.test']]) {
     await db.query('insert into auth.users(id,email) values($1,$2)', [id,email])
@@ -113,21 +113,46 @@ test('onboarding validates all answers atomically and cannot be submitted twice'
   } finally { await db.close() }
 })
 
-test('meeting end creates one reflection; late attendance is eligible, strangers are not', async () => {
+test('daily reflection requires completed attendance and is private to the participant', async () => {
   const db = await setup()
   try {
     const {rows:[room]}=await db.query<{id:string}>("insert into connect.meeting_rooms(host_user_id,external_meeting_id,room_type,title) values($1,'123456789','personal','Sala') returning id",[owner])
     const {rows:[meeting]}=await db.query<{id:string}>("insert into connect.meetings(room_id,title,status,external_uuid) values($1,'Sessão','ended','occurrence-1') returning id",[room.id])
     await db.query("update connect.meetings set status='ended' where id=$1",[meeting.id])
-    const {rows:[assignment]}=await db.query<{id:string}>('select id from connect.form_assignments where meeting_id=$1',[meeting.id])
-    assert.equal((await db.query('select * from connect.form_assignments where meeting_id=$1',[meeting.id])).rows.length,1)
-    await assert.rejects(asUser(db,alice,()=>db.query('select connect.submit_form($1,$2)',[assignment.id,{learned_today:'Disciplina'}])), /unavailable/)
+    assert.equal((await db.query('select * from connect.form_assignments where meeting_id=$1',[meeting.id])).rows.length,0)
     await db.query("insert into connect.meeting_attendance_sessions(meeting_id,user_id,session_key,participant_role_snapshot,joined_at,left_at) values($1,$2,'session-1','member',now()-interval '15 seconds',now())",[meeting.id,alice])
+    const {rows:[assignment]}=await db.query<{id:string}>('select id from connect.form_assignments where meeting_id=$1',[meeting.id])
+    await assert.rejects(asUser(db,bob,()=>db.query('select connect.submit_form($1,$2)',[assignment.id,{learned_today:'Disciplina'}])), /unavailable/)
     assert.equal(Number((await db.query<{duration_seconds:string}>("select duration_seconds from connect.meeting_attendance_sessions")).rows[0].duration_seconds),15)
     await db.query("update connect.meeting_attendance_sessions set participant_name='Alice'")
     assert.equal((await db.query('select * from connect.notifications')).rows.length,1)
     await asUser(db,alice,()=>db.query('select connect.submit_form($1,$2)',[assignment.id,{learned_today:'Disciplina'}]))
     await asUser(db,bob,async()=>assert.equal((await db.query('select * from connect.notifications')).rows.length,0))
+  } finally { await db.close() }
+})
+
+test('ten reconnects and multiple meetings produce one daily questionnaire, with a new one next day', async () => {
+  const db = await setup()
+  try {
+    const {rows:[room]} = await db.query<{id:string}>("insert into connect.meeting_rooms(host_user_id,external_meeting_id,room_type,title) values($1,'987654321','personal','Sala') returning id",[owner])
+    const {rows:[meeting]} = await db.query<{id:string}>("insert into connect.meetings(room_id,title,status) values($1,'Sessão','live') returning id",[room.id])
+    await db.query("insert into connect.meeting_attendance_sessions(meeting_id,user_id,session_key,participant_role_snapshot,joined_at) values($1,$2,'open','member','2026-10-06T10:00:00Z')",[meeting.id,alice])
+    assert.equal((await db.query('select * from connect.form_assignments where reflection_day is not null')).rows.length,0)
+    await asUser(db,alice,async()=>assert.equal((await db.query('select * from connect.form_assignments where meeting_id is not null')).rows.length,0))
+    await db.query("update connect.meeting_attendance_sessions set left_at='2026-10-06T10:10:00Z' where session_key='open'")
+    for (let i=0;i<10;i++) await db.query("insert into connect.meeting_attendance_sessions(meeting_id,user_id,session_key,participant_role_snapshot,joined_at,left_at) values($1,$2,$3,'member','2026-10-06T11:00:00Z','2026-10-06T11:10:00Z')",[meeting.id,alice,`reconnect-${i}`])
+    const {rows:[second]} = await db.query<{id:string}>("insert into connect.meetings(room_id,title,status,actual_ended_at) values($1,'Segunda sessão','ended','2026-10-06T14:00:00Z') returning id",[room.id])
+    await db.query("insert into connect.meeting_attendance_sessions(meeting_id,user_id,session_key,participant_role_snapshot,joined_at) values($1,$2,'ended-session','member','2026-10-06T13:00:00Z')",[second.id,alice])
+    const {rows:assignments} = await db.query<{id:string}>('select id from connect.form_assignments where reflection_day is not null')
+    assert.equal(assignments.length,1)
+    assert.equal((await db.query("select * from connect.notifications where event_type='form_available'")).rows.length,1)
+    await asUser(db,alice,()=>db.query('select connect.submit_form($1,$2)',[assignments[0].id,{learned_today:'Disciplina'}]))
+    await assert.rejects(asUser(db,alice,()=>db.query('select connect.submit_form($1,$2)',[assignments[0].id,{learned_today:'Outra resposta'}])),/Already submitted/)
+    await db.query("insert into connect.meeting_attendance_sessions(meeting_id,user_id,session_key,participant_role_snapshot,joined_at,left_at) values($1,$2,'next-day','member','2026-10-07T03:01:00Z','2026-10-07T03:02:00Z')",[meeting.id,alice])
+    await db.query("insert into connect.meeting_attendance_sessions(meeting_id,user_id,session_key,participant_role_snapshot,joined_at,left_at) values($1,$2,'bob','member','2026-10-06T11:00:00Z','2026-10-06T11:10:00Z')",[meeting.id,bob])
+    assert.equal((await db.query('select * from connect.form_assignments where reflection_day is not null')).rows.length,3)
+    await asUser(db,bob,async()=>assert.equal((await db.query('select * from connect.form_assignments where reflection_day is not null')).rows.length,1))
+    await asUser(db,alice,async()=>assert.equal((await db.query('select * from connect.form_assignments where reflection_day is not null')).rows.length,2))
   } finally { await db.close() }
 })
 

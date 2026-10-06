@@ -16,6 +16,7 @@ export default function LanguageSwitcher({ currentLocale }: { currentLocale: Loc
     <div className="flex items-center gap-2 border border-white/10 bg-white/5 rounded-xl p-1 relative">
       <Globe className="w-4 h-4 text-acro-silver ml-2 absolute left-0 pointer-events-none" />
       <select 
+        aria-label={currentLocale === 'ht' ? 'Lang' : 'Idioma'}
         value={currentLocale} 
         onChange={(e) => switchLanguage(e.target.value as Locale)}
         className="appearance-none bg-transparent text-sm text-white font-medium pl-8 pr-4 py-1.5 focus:outline-none cursor-pointer"

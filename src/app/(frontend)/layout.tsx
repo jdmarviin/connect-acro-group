@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
-import FloatingMenu from "@/components/FloatingMenu";
 import { cookies } from "next/headers";
 
 const geistSans = localFont({
@@ -36,7 +35,6 @@ export default async function RootLayout({
         <main className="flex-1">
           {children}
         </main>
-        <FloatingMenu />
       </body>
     </html>
   );
