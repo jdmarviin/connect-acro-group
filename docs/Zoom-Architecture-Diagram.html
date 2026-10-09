@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Zoom Architecture Diagram - ACRO GROUP Connect</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      background-color: #f9f9f9;
+    }
+    .diagram-container {
+      background: white;
+      padding: 40px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 30px;
+    }
+    .print-button {
+      margin-top: 30px;
+      padding: 10px 20px;
+      background-color: #0b5cff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    .print-button:hover {
+      background-color: #094acc;
+    }
+    @media print {
+      .print-button {
+        display: none;
+      }
+      body {
+        background-color: white;
+      }
+      .diagram-container {
+        box-shadow: none;
+        padding: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="diagram-container">
+    <h1>ACRO GROUP Connect - Zoom Architecture</h1>
+    
+    <div class="mermaid">
+      flowchart LR
+        L[Lead] --> UI[Next.js Application]
+        T[Admin / Host] --> UI
+        
+        subgraph ACRO GROUP Connect
+          UI --> AUTH[Payload CMS Auth]
+          UI --> SDK[Embedded Zoom Web SDK]
+          AUTH --> TX[PostgreSQL Database]
+          WH_HANDLER[Zoom Webhooks Handler] --> TX
+        end
+        
+        subgraph Zoom Infrastructure
+          Z_API[Zoom API]
+          Z_MEETING[Zoom Meetings]
+          Z_WH[Zoom Webhook Dispatcher]
+        end
+
+        T --> Z_API
+        SDK --> Z_MEETING
+        Z_MEETING --> Z_WH
+        Z_WH -- HMAC Signed Payload --> WH_HANDLER
+    </div>
+
+    <button class="print-button" onclick="window.print()">Save as PDF / Save as Image</button>
+  </div>
+
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: 'default' });
+  </script>
+
+</body>
+</html>
