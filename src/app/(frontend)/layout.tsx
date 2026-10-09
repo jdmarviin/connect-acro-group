@@ -18,7 +18,10 @@ export const metadata: Metadata = {
   title: "Acro Group Connect — Sal trading an dirèk",
   description: "Swiv sal trading yo an dirèk, prezans ak angajman kominote ou nan yon sèl panèl.",
   other: {
-    "zoom-domain-verification": "ZOOM_verify_1dd7c94e409247c7b78aa057d9954295",
+    "zoom-domain-verification": [
+      "ZOOM_verify_1dd7c94e409247c7b78aa057d9954295",
+      "ZOOM_verify_4aeb58ccaac745a0895dad8bf188ac1d"
+    ],
   },
 };
 
