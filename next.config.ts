@@ -19,6 +19,14 @@ const nextConfig: NextConfig = {
     };
     return config;
   },
+  async rewrites() {
+    return [
+      {
+        source: '/auth/v1/callback',
+        destination: 'https://vlktqilzuvawrkyyunge.supabase.co/auth/v1/callback',
+      },
+    ];
+  },
 };
 
 export default nextConfig;
