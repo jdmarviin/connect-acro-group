@@ -22,8 +22,12 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
-        source: '/auth/v1/callback',
-        destination: 'https://vlktqilzuvawrkyyunge.supabase.co/auth/v1/callback',
+        source: '/auth/v1/:path*',
+        destination: 'https://vlktqilzuvawrkyyunge.supabase.co/auth/v1/:path*',
+      },
+      {
+        source: '/rest/v1/:path*',
+        destination: 'https://vlktqilzuvawrkyyunge.supabase.co/rest/v1/:path*',
       },
     ];
   },
