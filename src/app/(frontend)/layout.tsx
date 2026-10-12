@@ -20,7 +20,8 @@ export const metadata: Metadata = {
   other: {
     "zoom-domain-verification": [
       "ZOOM_verify_1dd7c94e409247c7b78aa057d9954295",
-      "ZOOM_verify_4aeb58ccaac745a0895dad8bf188ac1d"
+      "ZOOM_verify_4aeb58ccaac745a0895dad8bf188ac1d",
+      "ZOOM_verify_8e996186c9e247a6bac56f20ab64ba96"
     ],
   },
 };
