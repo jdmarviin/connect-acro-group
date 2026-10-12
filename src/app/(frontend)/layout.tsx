@@ -16,12 +16,11 @@ const geistMono = localFont({
 
 export const metadata: Metadata = {
   title: "Acro Group Connect — Sal trading an dirèk",
-  description: "Swiv sal trading yo an dirèk, prezans ak angajman kominote ou nan yon sèl panèl.",
+  description:
+    "Swiv sal trading yo an dirèk, prezans ak angajman kominote ou nan yon sèl panèl.",
   other: {
     "zoom-domain-verification": [
-      "ZOOM_verify_1dd7c94e409247c7b78aa057d9954295",
-      "ZOOM_verify_4aeb58ccaac745a0895dad8bf188ac1d",
-      "ZOOM_verify_8e996186c9e247a6bac56f20ab64ba96"
+      "ZOOM_verify_8e996186c9e247a6bac56f20ab64ba96",
     ],
   },
 };
@@ -32,16 +31,15 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const cookieStore = await cookies();
-  const documentLanguage = cookieStore.get("NEXT_LOCALE")?.value === "pt" ? "pt-BR" : "ht";
+  const documentLanguage =
+    cookieStore.get("NEXT_LOCALE")?.value === "pt" ? "pt-BR" : "ht";
 
   return (
     <html lang={documentLanguage}>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-acro-dark text-acro-silver flex flex-col`}
       >
-        <main className="flex-1">
-          {children}
-        </main>
+        <main className="flex-1">{children}</main>
       </body>
     </html>
   );
