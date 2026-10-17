@@ -18,7 +18,7 @@ async function saveProduct(data:FormData) {
 export default async function ProductsAdmin() {
   await requireAdmin()
   const client=await supabaseServer()
-  const {data:products,error}=await client.from('products').select('*').order('created_at',{ascending:false})
+  const {data:products,error}=await client.from('products').select('*').eq('checkout_mode','external').order('created_at',{ascending:false})
   if(error) throw new Error('Não foi possível carregar produtos.')
   return <div className="max-w-3xl mx-auto p-8 pb-32 space-y-8"><h1 className="text-3xl font-bold text-white">Produtos</h1>
     {[null,...(products||[])].map(p=><form key={p?.id||'new'} action={saveProduct} className="glass-panel rounded-xl p-6 space-y-4">

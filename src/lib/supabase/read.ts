@@ -41,7 +41,7 @@ const projections: Record<keyof Documents,string> = {
  'createdAt',s.created_at,'updatedAt',s.updated_at) doc
  from connect.meeting_attendance_sessions s left join connect.meetings m on m.id=s.meeting_id
  left join connect.meeting_rooms r on r.id=m.room_id left join (${userProjection}) u on u.doc->>'id'=s.user_id::text`,
-  products:`select jsonb_build_object('id',id,'name',name,'description',description,'thumbnailUrl',coalesce(thumbnail_url,''),'checkoutUrl',coalesce(external_checkout_url,'')) doc from connect.products`,
+  products:`select jsonb_build_object('id',id,'name',name,'description',description,'thumbnailUrl',coalesce(thumbnail_url,''),'checkoutUrl',coalesce(external_checkout_url,'')) doc from connect.products where checkout_mode='external'`,
 }
 const allowedFields = new Set(['id','role','email','zoomId','user','kind','status','date','zoomMeetingId','meetingId','meetingUUID','roomKey','joinTime','createdAt','updatedAt'])
 function expression(field:string) {

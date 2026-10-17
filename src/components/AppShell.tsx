@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useRef, useState } from 'react'
-import { CalendarDays, ChartNoAxesCombined, ClipboardCheck, History, House, LogOut, Menu, Plus, Store, UsersRound, X } from 'lucide-react'
+import { CalendarDays, ChartNoAxesCombined, ClipboardCheck, GraduationCap, History, House, LogOut, Menu, Plus, ShoppingBag, Store, UsersRound, X } from 'lucide-react'
 import type { Locale } from '@/i18n/dictionaries'
 import { participantText } from '@/i18n/participant'
 import LanguageSwitcher from './LanguageSwitcher'
@@ -18,15 +18,19 @@ export default function AppShell({ children, name, locale, manager = false }: { 
     { href: '/admin/dashboard', label: t.overview, icon: ChartNoAxesCombined },
     { href: '/admin/usuarios', label: t.members, icon: UsersRound },
     { href: '/admin/meetings/new', label: t.schedule, icon: Plus },
+    { href: '/admin/cursos', label: t.courses, icon: GraduationCap },
+    { href: '/admin/catalogo', label: t.courseCatalog, icon: ShoppingBag },
     { href: '/admin/produtos', label: t.products, icon: Store },
   ] : [
     { href: '/dashboard', label: t.overview, icon: ChartNoAxesCombined },
     { href: '/dashboard/reunioes', label: t.meetings, icon: CalendarDays },
     { href: '/dashboard/historico', label: t.history, icon: History },
     { href: '/dashboard/pesquisas', label: t.surveys, icon: ClipboardCheck },
+    { href: '/dashboard/cursos', label: t.courses, icon: GraduationCap },
+    { href: '/dashboard/catalogo', label: t.catalog, icon: ShoppingBag },
     { href: '/dashboard/produtos', label: t.products, icon: Store },
   ]
-  const active = (href: string) => pathname === href || (href === '/dashboard/historico' && pathname.startsWith(`${href}/`)) || (href === '/dashboard/pesquisas' && pathname.startsWith('/dashboard/diario/'))
+  const active = (href: string) => pathname === href || (['/dashboard/historico', '/dashboard/cursos', '/dashboard/catalogo', '/admin/cursos', '/admin/catalogo'].includes(href) && pathname.startsWith(`${href}/`)) || (href === '/dashboard/pesquisas' && pathname.startsWith('/dashboard/diario/'))
   const current = links.find(link => active(link.href))?.label || (manager ? t.admin : t.space)
   async function logout() {
     setLeaving(true)

@@ -217,3 +217,89 @@ test('course release and progress enforce enrollment and payment grants are idem
   await asUser(db,bob,async()=>assert.equal((await db.query('select * from connect.lesson_progress')).rows.length,0))
  }finally{await db.close()}
 })
+
+test('only managers grant and revoke manual course access',async()=>{
+ const db=await setup()
+ try {
+  const {rows:[course]}=await db.query<{id:string}>("insert into connect.courses(slug,title,status) values('manual','Curso','published') returning id")
+  const {rows:[module]}=await db.query<{id:string}>("insert into connect.course_modules(course_id,title,position) values($1,'Módulo',1) returning id",[course.id])
+  await db.query("insert into connect.course_lessons(module_id,title,content_type,external_url,position) values($1,'Aula','video','https://player.hotmart.com/embed/abc',1)",[module.id])
+  await assert.rejects(asUser(db,alice,()=>db.query('select connect.set_course_enrollment($1,$2,true)',[course.id,'alice@example.test'])),/Forbidden/)
+  await assert.rejects(asUser(db,alice,()=>db.query("insert into connect.course_enrollments(user_id,course_id,source) values(auth.uid(),$1,'manual')",[course.id])),/permission denied/)
+  await assert.rejects(asUser(db,owner,()=>db.query('select connect.set_course_enrollment($1,$2,true)',[course.id,'nobody@example.test'])),/Member not found/)
+  await asUser(db,owner,()=>db.query('select connect.set_course_enrollment($1,$2,true)',[course.id,' Alice@Example.test ']))
+  await asUser(db,alice,async()=>assert.equal((await db.query('select * from connect.course_lessons')).rows.length,1))
+  await asUser(db,bob,async()=>assert.equal((await db.query('select * from connect.course_lessons')).rows.length,0))
+  await asUser(db,owner,()=>db.query('select connect.set_course_enrollment($1,$2,false)',[course.id,'alice@example.test']))
+  await asUser(db,alice,async()=>assert.equal((await db.query('select * from connect.course_lessons')).rows.length,0))
+  await asUser(db,owner,()=>db.query('select connect.set_course_enrollment($1,$2,true)',[course.id,'alice@example.test']))
+  const {rows}=await db.query<{status:string;source:string}>('select status,source from connect.course_enrollments')
+  assert.deepEqual(rows,[{status:'active',source:'manual'}])
+ }finally{await db.close()}
+})
+
+test('internal checkout prices orders server-side, renews term access and revokes it on refund',async()=>{
+ const db=await setup()
+ try {
+  const course=async(slug:string)=>(await db.query<{id:string}>("insert into connect.courses(slug,title,status) values($1,$1,'published') returning id",[slug])).rows[0].id
+  const product=async(name:string,courses:string[],accessDays:number|null,cents:number|null,mode='internal')=>{
+   const {rows:[p]}=await db.query<{id:string}>("insert into connect.products(name,status,checkout_mode,access_days) values($1,'published',$2,$3) returning id",[name,mode,accessDays])
+   for(const c of courses) await db.query('insert into connect.product_courses(product_id,course_id) values($1,$2)',[p.id,c])
+   if(cents!==null) await db.query('insert into connect.product_prices(product_id,amount_cents) values($1,$2)',[p.id,cents])
+   return p.id
+  }
+  const checkout=(user:string,id:string)=>asUser(db,user,async()=>(await db.query<{id:string}>('select connect.start_checkout($1) id',[id])).rows[0].id)
+  const setStatus=(id:string,status:string)=>db.query('update connect.orders set status=$2 where id=$1',[id,status])
+  const enrollment=async(id:string)=>(await db.query<{status:string;source:string;days:number|null}>("select status,source,round(extract(epoch from expires_at-now())/86400)::int days from connect.course_enrollments where user_id=$1 and course_id=$2",[alice,id])).rows[0]
+  const journey=async()=>(await db.query<{status:string}>('select status from connect.user_journeys where user_id=$1',[alice])).rows[0].status
+
+  const [lifetimeCourse,termCourse,manualCourse]=[await course('lifetime'),await course('term'),await course('manual')]
+  const lifetime=await product('Vitalício',[lifetimeCourse],null,19900)
+  const term=await product('Anual',[termCourse],30,9900)
+  await assert.rejects(checkout(alice,await product('Hotmart',[lifetimeCourse],null,100,'external')),/Product unavailable/)
+  await assert.rejects(checkout(alice,await product('Sem cursos',[],null,100)),/Product unavailable/)
+  await assert.rejects(checkout(alice,await product('Sem preço',[lifetimeCourse],null,null)),/Price unavailable/)
+  await assert.rejects(asUser(db,alice,()=>db.query("insert into connect.orders(user_id,subtotal_cents,total_cents,provider) values(auth.uid(),1,1,'stripe')")),/permission denied/)
+
+  const order=await checkout(alice,lifetime)
+  const {rows:[created]}=await db.query<{status:string;total_cents:string;provider:string;item:string}>('select o.status,o.total_cents::text,o.provider,i.product_name_snapshot item from connect.orders o join connect.order_items i on i.order_id=o.id where o.id=$1',[order])
+  assert.deepEqual(created,{status:'pending',total_cents:'19900',provider:'stripe',item:'Vitalício'})
+  await asUser(db,bob,async()=>assert.equal((await db.query('select * from connect.orders')).rows.length,0))
+  await assert.rejects(setStatus(order,'refunded'),/Invalid order transition/)
+  await setStatus(order,'paid')
+  assert.ok((await db.query<{paid_at:string}>('select paid_at from connect.orders where id=$1',[order])).rows[0].paid_at)
+  assert.deepEqual(await enrollment(lifetimeCourse),{status:'active',source:'purchase',days:null})
+  assert.equal(await journey(),'active_student')
+  await assert.rejects(setStatus(order,'pending'),/Invalid order transition/)
+  await assert.rejects(checkout(alice,lifetime),/Already owned/)
+
+  const [firstTerm,secondTerm]=[await checkout(alice,term),await checkout(alice,term)]
+  await setStatus(firstTerm,'paid')
+  await setStatus(secondTerm,'paid')
+  assert.equal((await enrollment(termCourse)).days,60)
+
+  const manualTerm=await product('Manual',[manualCourse],30,5000)
+  await db.query("insert into connect.course_enrollments(user_id,course_id,source,expires_at) values($1,$2,'manual',now()+interval '10 days')",[alice,manualCourse])
+  const manualOrder=await checkout(alice,manualTerm)
+  await setStatus(manualOrder,'paid')
+  await setStatus(manualOrder,'refunded')
+  assert.deepEqual(await enrollment(manualCourse),{status:'active',source:'manual',days:40})
+
+  await setStatus(order,'refunded')
+  assert.equal((await enrollment(lifetimeCourse)).status,'cancelled')
+  await assert.rejects(setStatus(order,'paid'),/Invalid order transition/)
+  await setStatus(firstTerm,'refunded')
+  assert.equal((await enrollment(termCourse)).status,'active')
+  assert.equal(await journey(),'active_student')
+  await setStatus(secondTerm,'refunded')
+  assert.equal((await enrollment(termCourse)).status,'cancelled')
+  assert.equal(await journey(),'inactive_student')
+
+  const repurchase=await checkout(alice,term)
+  await setStatus(repurchase,'paid')
+  assert.deepEqual(await enrollment(termCourse),{status:'active',source:'purchase',days:30})
+  const abandoned=await checkout(alice,lifetime)
+  await setStatus(abandoned,'cancelled')
+  await assert.rejects(setStatus(abandoned,'paid'),/Invalid order transition/)
+ }finally{await db.close()}
+})
